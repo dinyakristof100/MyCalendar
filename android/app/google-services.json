@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "626525324491",
+    "project_id": "mycalendar-970fe",
+    "storage_bucket": "mycalendar-970fe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:626525324491:android:18f5e88837b44aa697874e",
+        "android_client_info": {
+          "package_name": "com.mycalendar.my_calendar"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "626525324491-43rjos8826a55u2fqvtrt1ufpcf5n5sc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.mycalendar.my_calendar",
+            "certificate_hash": "0e5160209ce19b382d285bf9f27f8805d8878a02"
+          }
+        },
+        {
+          "client_id": "626525324491-ck83hc859qabb5boju5st0iulu1rd4f8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBmsSfBT-0t0uCXbAPpXwFdHcpO3O3NRJ4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "626525324491-ck83hc859qabb5boju5st0iulu1rd4f8.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "626525324491-u4od0nddol11t5611pljduf94sdiedb2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mycalendar.myCalendar"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

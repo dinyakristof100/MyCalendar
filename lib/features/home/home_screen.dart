@@ -8,30 +8,33 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(authControllerProvider);
+    final user = ref.watch(currentUserProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('MyCalendar'),
         actions: [
           IconButton(
             tooltip: 'Kijelentkezés',
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).signOut(),
+            onPressed: signOut,
             icon: const Icon(Icons.logout),
           ),
         ],
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Szia, ${user?.name ?? ''}! 👋\n\n'
-            'Ide jön majd a naptár és az edzésterv.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
+      body: switch (user) {
+        AsyncLoading() => const Center(child: CircularProgressIndicator()),
+        AsyncError(:final error) => Center(child: Text('Hiba: $error')),
+        _ => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Szia, ${user.value?.name ?? ''}! 👋\n\n'
+                'Ide jön majd a naptár és az edzésterv.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
           ),
-        ),
-      ),
+      },
     );
   }
 }

@@ -10,15 +10,19 @@ import 'features/home/home_screen.dart';
 /// bejelentkezve a /login-ról a főképernyőre.
 final routerProvider = Provider<GoRouter>((ref) {
   // A redirect újrafuttatásához figyeljük az auth állapotot egy Listenable-ön át.
-  final refresh = ValueNotifier<AuthUser?>(ref.read(authControllerProvider));
-  ref.listen(authControllerProvider, (_, next) => refresh.value = next);
+  final refresh =
+      ValueNotifier<AsyncValue<AuthUser?>>(ref.read(currentUserProvider));
+  ref.listen(currentUserProvider, (_, next) => refresh.value = next);
   ref.onDispose(refresh.dispose);
 
   return GoRouter(
     refreshListenable: refresh,
     initialLocation: '/',
     redirect: (context, state) {
-      final signedIn = ref.read(authControllerProvider) != null;
+      final auth = ref.read(currentUserProvider);
+      // Amíg a mentett munkamenet töltődik, ne ugráltassuk a felhasználót.
+      if (auth.isLoading) return null;
+      final signedIn = auth.value != null;
       final loggingIn = state.matchedLocation == '/login';
       if (!signedIn) return loggingIn ? null : '/login';
       if (loggingIn) return '/';

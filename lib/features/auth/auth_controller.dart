@@ -1,23 +1,41 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
-/// Bejelentkezett felhasználó. Egyelőre csak a név; a 3b lépésben Firebase
-/// User-ből töltjük (uid, email, fotó).
+/// A UI-nak ennyi kell a bejelentkezett felhasználóból. Így sem a router, sem a
+/// képernyők nem függenek a Firebase típusaitól — és tesztben felülírható.
 class AuthUser {
   const AuthUser(this.name);
   final String name;
 }
 
-/// Az auth "seam": a UI mindig ezt a signIn/signOut felületet hívja.
-class AuthController extends Notifier<AuthUser?> {
-  @override
-  AuthUser? build() => null; // induláskor kijelentkezve
+final _firebaseUserProvider = StreamProvider<User?>(
+  (ref) => FirebaseAuth.instance.authStateChanges(),
+);
 
-  // ponytail: stub sign-in a 3b Firebase-bekötésig — a törzset cseréljük
-  //           google_sign_in + FirebaseAuth-ra, a signIn/signOut felület marad.
-  Future<void> signIn() async => state = const AuthUser('Teszt Felhasználó');
+/// Az app auth állapota. `loading`, amíg a Firebase visszatölti a lemezre
+/// mentett munkamenetet — ilyenkor még nem szabad a login képernyőre dobni.
+final currentUserProvider = Provider<AsyncValue<AuthUser?>>((ref) {
+  return ref.watch(_firebaseUserProvider).whenData(
+        (user) => user == null
+            ? null
+            : AuthUser(user.displayName ?? user.email ?? 'Felhasználó'),
+      );
+});
 
-  Future<void> signOut() async => state = null;
+/// Google bejelentkezés, majd a kapott idToken beváltása Firebase munkamenetre.
+Future<void> signInWithGoogle() async {
+  final account = await GoogleSignIn.instance.authenticate();
+  final idToken = account.authentication.idToken;
+  if (idToken == null) {
+    throw StateError('A Google nem adott vissza idToken-t.');
+  }
+  await FirebaseAuth.instance.signInWithCredential(
+    GoogleAuthProvider.credential(idToken: idToken),
+  );
 }
 
-final authControllerProvider =
-    NotifierProvider<AuthController, AuthUser?>(AuthController.new);
+Future<void> signOut() async {
+  await GoogleSignIn.instance.signOut();
+  await FirebaseAuth.instance.signOut();
+}
