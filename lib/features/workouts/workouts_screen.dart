@@ -104,8 +104,9 @@ class _PlanView extends ConsumerWidget {
   final List<WorkoutPlan> plans;
   final WorkoutPlan plan;
 
-  /// Megerősítés után pipa. A kérdés a nap tartalmát is kimondja: egy elgépelt
-  /// koppintás a heti tervből venne el egy edzést.
+  /// Megerősítés után pipa. Hosszú nyomásra indul, nem koppintásra: görgetés
+  /// közben könnyű véletlenül eltalálni egy kártyát. A kérdés a nap tartalmát
+  /// is kimondja, mert egy téves pipa a heti tervből venne el egy edzést.
   Future<void> _confirm(
     BuildContext context,
     WidgetRef ref,
@@ -198,7 +199,7 @@ class _PlanView extends ConsumerWidget {
                 content: plan.weeks[week][day],
                 done: week == thisWeek && done.contains(day),
                 // Csak az aktuális hét pipálható, és csak ami még nincs kész.
-                onTap: week == thisWeek && !done.contains(day)
+                onLongPress: week == thisWeek && !done.contains(day)
                     ? () => _confirm(context, ref, day, plan.weeks[week][day])
                     : null,
               ),
@@ -251,13 +252,13 @@ class _DayCard extends StatelessWidget {
     required this.day,
     required this.content,
     required this.done,
-    required this.onTap,
+    required this.onLongPress,
   });
 
   final int day;
   final String content;
   final bool done;
-  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -273,7 +274,7 @@ class _DayCard extends StatelessWidget {
               )
             : cardSurface(theme),
         child: InkWell(
-          onTap: onTap,
+          onLongPress: onLongPress,
           borderRadius: BorderRadius.circular(22),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(18, 15, 18, 17),

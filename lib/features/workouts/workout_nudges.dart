@@ -35,6 +35,9 @@ const _details = NotificationDetails(
     channelDescription: 'Esti kérdés, hogy megvolt-e a mai edzés.',
     importance: Importance.high,
     priority: Priority.high,
+    // Este szól, amikor gyakran áll a Ne zavarjanak: emlékeztetőként a mód
+    // átengedi, így az órára is kimegy.
+    category: AndroidNotificationCategory.reminder,
   ),
   iOS: DarwinNotificationDetails(),
 );

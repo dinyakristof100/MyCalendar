@@ -18,6 +18,9 @@ const _details = NotificationDetails(
     channelDescription: 'Emlékeztető a naptáresemény előtt egy nappal.',
     importance: Importance.high,
     priority: Priority.high,
+    // Enélkül a „csak prioritásos” Ne zavarjanak mód elnyeli az értesítést, és
+    // akkor az órára sem jut el. Eseményként a naptár-kivétel átengedi.
+    category: AndroidNotificationCategory.event,
   ),
   iOS: DarwinNotificationDetails(),
 );
@@ -80,6 +83,8 @@ Future<void> scheduleReminders(List<CalendarEvent> events) async {
       id: event.id.hashCode.abs() % workoutIdBase,
       title: event.title,
       body: 'Holnap — ${formatStart(event)}',
+      // A koppintás (órán a „Megnyitás telefonon”) az eseménylistára visz.
+      payload: '/',
       // ponytail: UTC-ben ütemezünk. A plugin az abszolút időpontot küldi a
       // platformnak (ISO8601, offsettel), így nem kell külön csomag a készülék
       // IANA időzónájának kiderítéséhez. Ismétlődő értesítéshez
