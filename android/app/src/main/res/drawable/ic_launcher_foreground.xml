@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Az adaptive icon előtér rétege. Forrás: assets/icon/icon.svg (a háttér
+     nélkül) — ha a mesterpéldány változik, ezt is kövesd. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,51 H78 V74 A6,6 0 0 1 72,80 H36 A6,6 0 0 1 30,74 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,34.5 A2.5,2.5 0 0 1 45,34.5 V41.5 A2.5,2.5 0 0 1 40,41.5 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M63,34.5 A2.5,2.5 0 0 1 68,34.5 V41.5 A2.5,2.5 0 0 1 63,41.5 Z" />
+    <path
+        android:strokeColor="#3F51B5"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M41,65 L50,73 L68,56" />
+</vector>

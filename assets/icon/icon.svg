@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- MyCalendar app ikon — ez a mesterpéldány, minden más ebből származik.
+       A 108x108-as vászon az Android adaptive icon mérete: a tartalom a
+       középső ~66x66-os biztonságos zónában van, hogy kör alakú maszk se
+       vágja le. -->
+  <rect width="108" height="108" rx="24" fill="#3F51B5"/>
+
+  <!-- Naptár teste. A fejléc sáv szándékosan nincs megrajzolva: ugyanolyan
+       indigó lenne, mint a háttér, tehát láthatatlan — a naptár tetejét a
+       test egyenes felső éle és a gyűrűk adják. -->
+  <path fill="#FFFFFF" d="M30,51 H78 V74 A6,6 0 0 1 72,80 H36 A6,6 0 0 1 30,74 Z"/>
+  <!-- gyűrűk -->
+  <path fill="#FFFFFF" d="M40,34.5 A2.5,2.5 0 0 1 45,34.5 V41.5 A2.5,2.5 0 0 1 40,41.5 Z"/>
+  <path fill="#FFFFFF" d="M63,34.5 A2.5,2.5 0 0 1 68,34.5 V41.5 A2.5,2.5 0 0 1 63,41.5 Z"/>
+  <!-- pipa: az edzésterv-checklistre utal -->
+  <path fill="none" stroke="#3F51B5" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"
+        d="M41,65 L50,73 L68,56"/>
+</svg>
