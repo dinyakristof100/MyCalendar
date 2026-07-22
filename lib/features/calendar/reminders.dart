@@ -1,10 +1,8 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../../core/notifications.dart';
 import 'calendar_service.dart';
-
-final _plugin = FlutterLocalNotificationsPlugin();
 
 /// Egész napos eseménynél a kezdés helyi éjfél, így az „egy nappal korábban”
 /// hajnali 0:00-t jelentene — használhatatlan. Helyette az előző nap estéjén
@@ -24,25 +22,6 @@ const _details = NotificationDetails(
   iOS: DarwinNotificationDetails(),
 );
 
-/// A `main()`-ből hívandó: plugin + időzóna-adatbázis felhúzása, és az Android
-/// 13+ értesítési engedély elkérése.
-Future<void> initReminders() async {
-  tzdata.initializeTimeZones();
-  await _plugin.initialize(
-    settings: const InitializationSettings(
-      // Sziluett-ikon, nem a launcher ikon: a status bar egyszínűre maszkolja,
-      // a színes adaptive iconból fehér paca lenne.
-      android: AndroidInitializationSettings('@drawable/ic_notification'),
-      iOS: DarwinInitializationSettings(),
-    ),
-  );
-  await _plugin
-      .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-      >()
-      ?.requestNotificationsPermission();
-}
-
 /// Az emlékeztető időpontja: pontosan egy nappal a kezdés előtt, egész napos
 /// eseménynél az előző nap [_allDayReminderHour] órakor.
 ///
@@ -55,21 +34,50 @@ DateTime reminderTime(CalendarEvent event) {
       : DateTime(at.year, at.month, at.day - 1, at.hour, at.minute);
 }
 
+/// Amit legutóbb kiütemeztünk. Lásd [remindersSignature].
+String _scheduled = '';
+
+/// Az ütemezést meghatározó adatok egy sorban: ha ez nem változott, nincs mit
+/// újraütemezni.
+String remindersSignature(List<CalendarEvent> events) => [
+  for (final event in events)
+    '${event.id}|${event.title}|${reminderTime(event)}|${formatStart(event)}',
+].join(';');
+
 /// Újraütemezi az emlékeztetőket a kapott eseményekre.
 ///
 /// Előbb mindent töröl: a naptárban azóta törölt vagy áthelyezett esemény így
 /// nem hagy maga után árva emlékeztetőt, és nem kell helyi adatbázis a
 /// duplikátumok kiszűréséhez. A már elmúlt időpontokat kihagyja.
 Future<void> scheduleReminders(List<CalendarEvent> events) async {
-  await _plugin.cancelAll();
+  // A lista minden frissítéskor megjön — előtérbe kerüléskor, lehúzáskor,
+  // mentés után —, de többnyire ugyanaz. Változatlan listára a cancelAll + N
+  // ütemezés csak terhelné az Android főszálát, amiről a Flutter a vsync-et
+  // kapja: ettől akadna a UI.
+  final signature = remindersSignature(events);
+  if (signature == _scheduled) return;
+  _scheduled = signature;
+
+  // Az emlékeztető egy nappal előre szól, egy másodperc késés semmit nem
+  // jelent rajta — a most záródó lap és a lista animációja viszont pont ezt a
+  // szálat használja.
+  await Future<void>.delayed(const Duration(seconds: 1));
+
+  // Csak a saját azonosítótartományunkat töröljük: a cancelAll az esti
+  // edzés-kérdéseket is levinné.
+  for (final pending in await notifications.pendingNotificationRequests()) {
+    if (pending.id < workoutIdBase) await notifications.cancel(id: pending.id);
+  }
+
   final now = DateTime.now();
   for (final event in events) {
     final when = reminderTime(event);
     // Ma vagy holnap kezdődő eseménynél az emlékeztető ideje már elmúlt.
     if (!when.isAfter(now)) continue;
 
-    await _plugin.zonedSchedule(
-      id: event.id.hashCode,
+    await notifications.zonedSchedule(
+      // A tartományon belülre képezve, hogy az edzés-azonosítókkal ne ütközzön.
+      id: event.id.hashCode.abs() % workoutIdBase,
       title: event.title,
       body: 'Holnap — ${formatStart(event)}',
       // ponytail: UTC-ben ütemezünk. A plugin az abszolút időpontot küldi a

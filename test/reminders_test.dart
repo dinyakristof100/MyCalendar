@@ -20,4 +20,22 @@ void main() {
     final when = reminderTime(_event(DateTime(2026, 8, 1, 9)));
     expect(when, DateTime(2026, 7, 31, 9));
   });
+
+  test('az ujjlenyomat csak akkor változik, ha az ütemezés is', () {
+    final events = [_event(DateTime(2026, 7, 23, 14, 30))];
+    // Ugyanaz a lista újra lekérve: nincs mit újraütemezni.
+    expect(
+      remindersSignature(events),
+      remindersSignature([_event(DateTime(2026, 7, 23, 14, 30))]),
+    );
+    // Áthelyezett esemény és új esemény viszont változást jelent.
+    expect(
+      remindersSignature([_event(DateTime(2026, 7, 23, 15, 30))]),
+      isNot(remindersSignature(events)),
+    );
+    expect(
+      remindersSignature([...events, _event(DateTime(2026, 7, 24, 9))]),
+      isNot(remindersSignature(events)),
+    );
+  });
 }

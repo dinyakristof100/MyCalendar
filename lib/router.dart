@@ -7,6 +7,8 @@ import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/events/events_screen.dart';
 import 'features/settings/settings_screen.dart';
+import 'features/workouts/plan_form_screen.dart';
+import 'features/workouts/workouts_screen.dart';
 
 /// go_router auth-guarddal: kijelentkezve mindig a /login-ra terel,
 /// bejelentkezve a /login-ról a főképernyőre.
@@ -34,7 +36,15 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/', builder: (_, _) => const EventsScreen()),
       GoRoute(path: '/calendar', builder: (_, _) => const _Soon('Naptár')),
-      GoRoute(path: '/workouts', builder: (_, _) => const _Soon('Edzésnapló')),
+      GoRoute(
+        path: '/workouts',
+        builder: (_, _) => const WorkoutsScreen(),
+        // Alútvonal, hogy a felvitel a listára tegye rá magát: a fejlécben így
+        // magától megjelenik a vissza nyíl.
+        routes: [
+          GoRoute(path: 'new', builder: (_, _) => const PlanFormScreen()),
+        ],
+      ),
       GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
     ],

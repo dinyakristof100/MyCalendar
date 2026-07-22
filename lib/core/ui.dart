@@ -48,6 +48,16 @@ class _AppearState extends State<Appear> with SingleTickerProviderStateMixin {
     vsync: this,
     duration: const Duration(milliseconds: 340),
   );
+  // Egyszer épül fel, nem buildenként: a görbe és a tween minden build-nél új
+  // objektum volt, ráadásul a CurvedAnimation-t el is kell dobni.
+  late final CurvedAnimation _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Curves.easeOutCubic,
+  );
+  late final Animation<Offset> _slide = Tween(
+    begin: const Offset(0, 0.12),
+    end: Offset.zero,
+  ).animate(_curve);
   Timer? _delay;
 
   @override
@@ -64,6 +74,7 @@ class _AppearState extends State<Appear> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     _delay?.cancel();
+    _curve.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -72,19 +83,9 @@ class _AppearState extends State<Appear> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     if (MediaQuery.disableAnimationsOf(context)) return widget.child;
 
-    final curved = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    );
     return FadeTransition(
-      opacity: curved,
-      child: SlideTransition(
-        position: Tween(
-          begin: const Offset(0, 0.12),
-          end: Offset.zero,
-        ).animate(curved),
-        child: widget.child,
-      ),
+      opacity: _curve,
+      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }

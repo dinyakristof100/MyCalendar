@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'app.dart';
-import 'features/calendar/reminders.dart';
-import 'features/settings/settings_screen.dart';
+import 'core/notifications.dart';
+import 'core/prefs.dart';
+import 'features/workouts/workout_nudges.dart';
 import 'firebase_options.dart';
+import 'router.dart';
 
 /// A google-services.json-beli "client_type: 3" (web) kliens. Androidon ez kell
 /// ahhoz, hogy a bejelentkezés idToken-t adjon vissza, amit a Firebase elfogad.
@@ -17,7 +19,22 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await GoogleSignIn.instance.initialize(serverClientId: _serverClientId);
-  await initReminders();
-  await initSettings();
-  runApp(const ProviderScope(child: MyCalendarApp()));
+  await initPrefs();
+
+  // Saját konténer, hogy az értesítés-koppintás is elérje a routert — az a
+  // widget-fán kívülről érkezik.
+  final container = ProviderContainer();
+  await initNotifications(
+    onTap: (route) => container.read(routerProvider).go(route),
+  );
+  // Egyszeri beolvasás: innentől a terv és a pipák változását követve
+  // újraütemezi az esti kérdéseket.
+  container.read(workoutNudgeSyncProvider);
+
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MyCalendarApp(),
+    ),
+  );
 }

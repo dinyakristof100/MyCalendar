@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_scaffold.dart';
+import '../../core/prefs.dart';
 
 const _key = 'themeMode';
-
-/// A main tölti be indításkor, hogy a mentett téma már az első képnél érvényes
-/// legyen — utólagos beolvasásnál egy pillanatra a rossz téma villanna fel.
-late final SharedPreferences _prefs;
-
-Future<void> initSettings() async =>
-    _prefs = await SharedPreferences.getInstance();
 
 /// Az app színkészlete. Alapértelmezés: a telefon beállítása.
 final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(
@@ -23,11 +16,11 @@ class ThemeModeController extends Notifier<ThemeMode> {
   ThemeMode build() =>
       // Ismeretlen (pl. régi vagy kézzel írt) érték esetén is a rendszer a
       // biztonságos alapértelmezés.
-      ThemeMode.values.asNameMap()[_prefs.getString(_key)] ?? ThemeMode.system;
+      ThemeMode.values.asNameMap()[prefs.getString(_key)] ?? ThemeMode.system;
 
   Future<void> set(ThemeMode mode) async {
     state = mode;
-    await _prefs.setString(_key, mode.name);
+    await prefs.setString(_key, mode.name);
   }
 }
 

@@ -75,11 +75,18 @@ class _Menu extends ConsumerWidget {
                 leading: Icon(item.icon),
                 title: Text(item.label),
                 selected: item.path == here,
-                // A pop csukja a fiókot, a go váltja az oldalt. Az aktuális
+                // A pop csukja a fiókot, a push nyitja az oldalt. Az aktuális
                 // oldalra kattintva csak becsukódik.
+                //
+                // push és nem go: a go lecseréli az útvonal-vermet, onnan a
+                // rendszer vissza gombja már az appból lépne ki. Így viszont az
+                // előző oldalra visz.
+                //
+                // ponytail: a verem oda-vissza lépkedéssel nőhet. Néhány oldalnál
+                // ez pár elem — ha zavaró lesz, jöhet a „főoldalig ürítés".
                 onTap: () {
                   Navigator.pop(context);
-                  if (item.path != here) context.go(item.path);
+                  if (item.path != here) context.push(item.path);
                 },
               ),
             const Divider(),
