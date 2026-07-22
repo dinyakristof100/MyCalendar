@@ -16,7 +16,9 @@ final _firebaseUserProvider = StreamProvider<User?>(
 /// Az app auth állapota. `loading`, amíg a Firebase visszatölti a lemezre
 /// mentett munkamenetet — ilyenkor még nem szabad a login képernyőre dobni.
 final currentUserProvider = Provider<AsyncValue<AuthUser?>>((ref) {
-  return ref.watch(_firebaseUserProvider).whenData(
+  return ref
+      .watch(_firebaseUserProvider)
+      .whenData(
         (user) => user == null
             ? null
             : AuthUser(user.displayName ?? user.email ?? 'Felhasználó'),

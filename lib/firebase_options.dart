@@ -62,8 +62,10 @@ class DefaultFirebaseOptions {
     messagingSenderId: '626525324491',
     projectId: 'mycalendar-970fe',
     storageBucket: 'mycalendar-970fe.firebasestorage.app',
-    androidClientId: '626525324491-43rjos8826a55u2fqvtrt1ufpcf5n5sc.apps.googleusercontent.com',
-    iosClientId: '626525324491-u4od0nddol11t5611pljduf94sdiedb2.apps.googleusercontent.com',
+    androidClientId:
+        '626525324491-43rjos8826a55u2fqvtrt1ufpcf5n5sc.apps.googleusercontent.com',
+    iosClientId:
+        '626525324491-u4od0nddol11t5611pljduf94sdiedb2.apps.googleusercontent.com',
     iosBundleId: 'com.mycalendar.myCalendar',
   );
 }

@@ -1,63 +1,125 @@
-import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:googleapis/calendar/v3.dart';
 
-/// Csak eseményekhez kell hozzáférés, a teljes naptárhoz (naptárak létrehozása,
-/// ACL-ek) nem. Ez a scope van felvéve a Google Cloud consent screenre is.
-const _scopes = [CalendarApi.calendarEventsScope];
+/// Az eszköz naptárát olvasó és író natív csatorna (lásd `MainActivity.kt`).
+const _channel = MethodChannel('mycalendar/device_calendar');
 
-/// Az esemény kezdete, egész napos jelzéssel.
+const _days = 14;
+
+/// A natív oldal ezzel jelzi, hogy a felhasználó még nem adta meg a
+/// naptár-engedélyt.
+const permissionDeniedCode = 'PERMISSION_DENIED';
+
+/// A vége sosem előzheti meg a kezdést — a naptár se fogadna el ilyet. A
+/// visszafelé állított véget egyórás eseménnyé igazítjuk.
+DateTime clampEnd(DateTime start, DateTime end) =>
+    end.isAfter(start) ? end : start.add(const Duration(hours: 1));
+
+/// Új esemény beírása az eszköz naptárába. Több napon átnyúlhat.
 ///
-/// A Calendar API egész napos eseménynél a `date` mezőt tölti (helyi éjfélre
-/// parse-olva), időpontosnál a `dateTime`-ot (RFC3339, jellemzően UTC). A
-/// `date`-et TILOS időzóna-váltani, mert átcsúszna a szomszédos napra —
-/// ezért jön külön az `allDay` jelzés a megjelenítéshez.
-({DateTime at, bool allDay})? eventStart(Event event) {
-  final when = event.start;
-  final dateTime = when?.dateTime;
-  if (dateTime != null) return (at: dateTime.toLocal(), allDay: false);
-  final date = when?.date;
-  if (date != null) return (at: date, allDay: true);
-  return null;
+/// A hívó dolga frissíteni a listát — az `upcomingEventsProvider`
+/// érvénytelenítése az emlékeztetőket is újraütemezi.
+Future<void> createEvent({
+  required String title,
+  required DateTime start,
+  required DateTime end,
+}) => _channel.invokeMethod<String>('createEvent', {
+  'title': title,
+  'begin': start.millisecondsSinceEpoch,
+  'end': end.millisecondsSinceEpoch,
+});
+
+/// Egy naptáresemény annyi mezővel, amennyit az app tényleg használ.
+class CalendarEvent {
+  const CalendarEvent({
+    required this.id,
+    required this.title,
+    required this.at,
+    required this.allDay,
+    this.end,
+    this.description,
+    this.location,
+  });
+
+  final String id;
+  final String title;
+  final DateTime at;
+  final bool allDay;
+
+  /// A befejezés ideje. Egész napos eseménynél `null` — ott az Android a
+  /// következő nap UTC éjfelét adja, ami nem megmutatható időpont.
+  final DateTime? end;
+
+  /// Üres helyett `null`: a részletek lapon így elég a létezésüket vizsgálni.
+  final String? description;
+  final String? location;
 }
+
+String? _text(Object? value) {
+  final text = (value as String?)?.trim();
+  return text == null || text.isEmpty ? null : text;
+}
+
+/// A natív oldalról érkező nyers map átalakítása.
+///
+/// Egész napos eseménynél az Android a kezdést **UTC éjfélként** adja meg, nem
+/// helyi időként. Ezt tilos időzónát váltva értelmezni, mert átcsúszna a
+/// szomszédos napra — ezért olvassuk ki a dátumot UTC-ben, és építünk belőle
+/// helyi dátumot.
+CalendarEvent parseEvent(Map<String, Object?> raw) {
+  final allDay = raw['allDay'] == true;
+  final begin = raw['begin']! as int;
+  final end = raw['end'] as int?;
+  final title = (raw['title'] as String?) ?? '';
+  final utc = DateTime.fromMillisecondsSinceEpoch(begin, isUtc: true);
+
+  return CalendarEvent(
+    id: raw['id']! as String,
+    title: title.isEmpty ? '(névtelen esemény)' : title,
+    at: allDay
+        ? DateTime(utc.year, utc.month, utc.day)
+        : DateTime.fromMillisecondsSinceEpoch(begin),
+    end: allDay || end == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(end),
+    allDay: allDay,
+    description: _text(raw['description']),
+    location: _text(raw['location']),
+  );
+}
+
+String _pad(int n) => n.toString().padLeft(2, '0');
+
+/// `14:30`.
+String hhmm(DateTime time) => '${_pad(time.hour)}:${_pad(time.minute)}';
+
+/// `14:30`. Egész napos eseményre `null` — ott nincs értelmes időpont.
+String? formatTime(CalendarEvent event) => event.allDay ? null : hhmm(event.at);
 
 /// `07. 23.` egész naposra, `07. 23. 14:30` időpontosra.
 ///
+/// Az értesítés szövegéhez kell, ahol a dátum sem derül ki a környezetből. A
+/// listában ehelyett a napfejléc adja a dátumot, és csak [formatTime] kell.
+///
 /// ponytail: kézi formázás, mert az app-ban nincs `intl` és nincsenek magyar
-/// locale delegate-ek — ha kell a „hétfő”/„holnap” jellegű szöveg, akkor jöhet.
-String formatStart(({DateTime at, bool allDay}) start) {
-  String pad(int n) => n.toString().padLeft(2, '0');
-  final date = '${pad(start.at.month)}. ${pad(start.at.day)}.';
-  if (start.allDay) return '$date egész nap';
-  return '$date ${pad(start.at.hour)}:${pad(start.at.minute)}';
+/// locale delegate-ek.
+String formatStart(CalendarEvent event) {
+  final date = '${_pad(event.at.month)}. ${_pad(event.at.day)}.';
+  final time = formatTime(event);
+  return time == null ? '$date egész nap' : '$date $time';
 }
 
-/// A következő 14 nap eseményei a felhasználó fő naptárából, kezdés szerint.
-final upcomingEventsProvider = FutureProvider<List<Event>>((ref) async {
-  final authz = GoogleSignIn.instance.authorizationClient;
-  // A scope NEM jön a bejelentkezéssel (google_sign_in 7.x): ha még nincs
-  // megadva, itt kérünk rá — a provider a foregroundban lévő UI-ból fut, tehát
-  // a felhasználói interakciót igénylő ág is megengedett.
-  final granted = await authz.authorizationForScopes(_scopes) ??
-      await authz.authorizeScopes(_scopes);
-
-  final client = granted.authClient(scopes: _scopes);
-  try {
-    final now = DateTime.now();
-    final events = await CalendarApi(client).events.list(
-          'primary',
-          timeMin: now.toUtc(),
-          timeMax: now.add(const Duration(days: 14)).toUtc(),
-          // Az ismétlődő eseményeket példányokra bontja. Enélkül nincs
-          // startTime szerinti rendezés, és emlékeztetőt sem lehetne az egyes
-          // előfordulásokhoz időzíteni.
-          singleEvents: true,
-          orderBy: 'startTime',
-        );
-    // ponytail: nincs lapozás, 14 nap belefér az alap 250-es limitbe.
-    return events.items ?? const [];
-  } finally {
-    client.close();
-  }
+/// A következő 14 nap eseményei az eszköz naptárából, kezdés szerint rendezve.
+///
+/// Nincs OAuth scope és nincs hálózati hívás: a naptár már szinkronizálva van a
+/// készüléken. A rendezést és az ismétlődő események előfordulásokra bontását
+/// az Android `Instances` táblája végzi.
+final upcomingEventsProvider = FutureProvider<List<CalendarEvent>>((ref) async {
+  final raw = await _channel.invokeMethod<List<Object?>>('upcomingEvents', {
+    'days': _days,
+  });
+  return [
+    for (final event in raw ?? const <Object?>[])
+      parseEvent((event! as Map).cast<String, Object?>()),
+  ];
 });

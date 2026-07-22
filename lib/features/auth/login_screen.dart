@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../core/ui.dart';
 import 'auth_controller.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -20,29 +21,93 @@ class LoginScreen extends StatelessWidget {
 
   void _showError(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Bejelentkezés sikertelen: $message')),
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        content: Text('Bejelentkezés sikertelen: $message'),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.calendar_month, size: 96, color: scheme.primary),
-            const SizedBox(height: 16),
-            Text('MyCalendar',
-                style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 48),
-            FilledButton.icon(
-              onPressed: () => _signIn(context),
-              icon: const Icon(Icons.login),
-              label: const Text('Bejelentkezés Google-fiókkal'),
-            ),
-          ],
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Spacer(flex: 3),
+              Appear(
+                index: 0,
+                child: Center(
+                  child: Container(
+                    width: 96,
+                    height: 96,
+                    decoration: cardSurface(
+                      theme,
+                      radius: 28,
+                      color: scheme.primaryContainer,
+                    ),
+                    child: Icon(
+                      Icons.event_available_outlined,
+                      size: 46,
+                      color: scheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              Appear(
+                index: 1,
+                child: Text(
+                  'MyCalendar',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.displaySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+              const Spacer(flex: 4),
+              Appear(
+                index: 2,
+                child: FilledButton(
+                  onPressed: () => _signIn(context),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                    elevation: 3,
+                    shadowColor: scheme.primary.withValues(alpha: 0.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    textStyle: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  child: const Text('Bejelentkezés Google-fiókkal'),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Appear(
+                index: 3,
+                child: Text(
+                  'A naptáradat a készülékről olvassuk. Semmi nem kerül '
+                  'szerverre.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+            ],
+          ),
         ),
       ),
     );

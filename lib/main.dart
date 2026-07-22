@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import 'app.dart';
 import 'features/calendar/reminders.dart';
+import 'features/settings/settings_screen.dart';
 import 'firebase_options.dart';
 
 /// A google-services.json-beli "client_type: 3" (web) kliens. Androidon ez kell
@@ -17,5 +18,6 @@ Future<void> main() async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await GoogleSignIn.instance.initialize(serverClientId: _serverClientId);
   await initReminders();
+  await initSettings();
   runApp(const ProviderScope(child: MyCalendarApp()));
 }

@@ -3,6 +3,12 @@
          beütemezett emlékeztetőket. (A POST_NOTIFICATIONS-t maga a plugin
          deklarálja, itt nem kell megismételni.) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- A közelgő események kiolvasása az eszközre szinkronizált naptárból.
+         Így nem kell a Google `calendar.events` OAuth scope-ja, ami érzékeny
+         lévén "unverified app" figyelmeztetést hozna a bejelentkezésnél. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR"/>
+    <!-- Az appból létrehozott esemény beírása ugyanabba a naptárba. -->
+    <uses-permission android:name="android.permission.WRITE_CALENDAR"/>
     <application
         android:label="MyCalendar"
         android:name="${applicationName}"

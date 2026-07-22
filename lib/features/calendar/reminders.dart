@@ -1,5 +1,4 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:googleapis/calendar/v3.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -39,7 +38,8 @@ Future<void> initReminders() async {
   );
   await _plugin
       .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+        AndroidFlutterLocalNotificationsPlugin
+      >()
       ?.requestNotificationsPermission();
 }
 
@@ -48,9 +48,9 @@ Future<void> initReminders() async {
 ///
 /// Fali óra szerint számol (nap − 1), nem 24 óra kivonásával — így a nyári
 /// időszámítás váltásának hetében sem csúszik el egy órát.
-DateTime reminderTime(({DateTime at, bool allDay}) start) {
-  final at = start.at;
-  return start.allDay
+DateTime reminderTime(CalendarEvent event) {
+  final at = event.at;
+  return event.allDay
       ? DateTime(at.year, at.month, at.day - 1, _allDayReminderHour)
       : DateTime(at.year, at.month, at.day - 1, at.hour, at.minute);
 }
@@ -60,22 +60,18 @@ DateTime reminderTime(({DateTime at, bool allDay}) start) {
 /// Előbb mindent töröl: a naptárban azóta törölt vagy áthelyezett esemény így
 /// nem hagy maga után árva emlékeztetőt, és nem kell helyi adatbázis a
 /// duplikátumok kiszűréséhez. A már elmúlt időpontokat kihagyja.
-Future<void> scheduleReminders(List<Event> events) async {
+Future<void> scheduleReminders(List<CalendarEvent> events) async {
   await _plugin.cancelAll();
   final now = DateTime.now();
   for (final event in events) {
-    final start = eventStart(event);
-    final id = event.id?.hashCode;
-    if (start == null || id == null) continue;
-
-    final when = reminderTime(start);
+    final when = reminderTime(event);
     // Ma vagy holnap kezdődő eseménynél az emlékeztető ideje már elmúlt.
     if (!when.isAfter(now)) continue;
 
     await _plugin.zonedSchedule(
-      id: id,
-      title: event.summary ?? 'Naptáresemény',
-      body: 'Holnap — ${formatStart(start)}',
+      id: event.id.hashCode,
+      title: event.title,
+      body: 'Holnap — ${formatStart(event)}',
       // ponytail: UTC-ben ütemezünk. A plugin az abszolút időpontot küldi a
       // platformnak (ISO8601, offsettel), így nem kell külön csomag a készülék
       // IANA időzónájának kiderítéséhez. Ismétlődő értesítéshez
