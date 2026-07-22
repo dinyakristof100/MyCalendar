@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyCalendar — Adatkezelési tájékoztató</title>
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <img src="icon.png" alt="MyCalendar ikon">
+  <div>
+    <h1>Adatkezelési tájékoztató</h1>
+    <p class="updated">MyCalendar · hatályos: 2026. július 22.</p>
+  </div>
+</header>
+
+<div class="callout">
+  <strong>Röviden:</strong> a MyCalendar mögött nincs saját szerver. A naptáradat
+  a telefonod és a Google között mozog, sehol máshol nem tárolódik. Nincs
+  analitika, nincs hirdetés, és semmilyen adatod nem kerül harmadik félhez.
+</div>
+
+<h2>Ki kezeli az adatokat</h2>
+<p>
+  A MyCalendar egy magánszemély által fejlesztett, nem üzleti célú, nyílt
+  forrású alkalmazás. Kapcsolat: <a href="mailto:kristofka0031@gmail.com">kristofka0031@gmail.com</a>.
+</p>
+
+<h2>Milyen adatokhoz fér hozzá az app</h2>
+<table>
+  <tr>
+    <th>Adat</th>
+    <th>Mire használjuk</th>
+    <th>Hol tárolódik</th>
+  </tr>
+  <tr>
+    <td>Google-fiókod alapadatai (név, e-mail cím, profilkép)</td>
+    <td>Bejelentkezés, hogy az adataid a saját fiókodhoz kötődjenek</td>
+    <td>Firebase Authentication (Google LLC)</td>
+  </tr>
+  <tr>
+    <td>Google Naptár eseményeid a következő 14 napra</td>
+    <td>Az események listázása, és az emlékeztetők időzítése</td>
+    <td><strong>Csak a készülékeden</strong>, a memóriában — nem kerül szerverre</td>
+  </tr>
+  <tr>
+    <td>Ütemezett értesítések</td>
+    <td>Hogy az esemény előtti napon szóljon a telefon</td>
+    <td>A készüléked helyi értesítés-ütemezőjében</td>
+  </tr>
+</table>
+
+<h2>Amit az app NEM csinál</h2>
+<ul>
+  <li>Nem gyűjt analitikát, nem követi a használatot.</li>
+  <li>Nem jelenít meg hirdetést.</li>
+  <li>Nem ad el, nem ad át és nem oszt meg adatot harmadik féllel.</li>
+  <li>Nem tárolja a naptáradat semmilyen szerveren.</li>
+  <li>Nem fér hozzá a névjegyeidhez, üzeneteidhez, helyzetedhez, kamerádhoz
+      vagy a fájljaidhoz.</li>
+</ul>
+
+<h2>Naptár-hozzáférés</h2>
+<p>
+  Az app a <code>calendar.events</code> jogosultságot kéri. Ezt kizárólag a
+  közelgő eseményeid <strong>olvasására</strong> használja, hogy listázni tudja
+  őket és időzíthesse az emlékeztetőket. A hozzáférés a te saját
+  hozzáférési tokeneddel, közvetlenül a Google felé történik.
+</p>
+
+<h2>Google szolgáltatások</h2>
+<p>
+  Az app a Google alábbi szolgáltatásait használja, amelyekre a Google saját
+  adatkezelése vonatkozik
+  (<a href="https://policies.google.com/privacy">policies.google.com/privacy</a>):
+</p>
+<ul>
+  <li><strong>Google Sign-In</strong> — bejelentkezés</li>
+  <li><strong>Firebase Authentication</strong> — a bejelentkezett fiók azonosítója</li>
+  <li><strong>Google Calendar API</strong> — az eseményeid lekérése</li>
+</ul>
+
+<h2>Meddig őrizzük az adatokat</h2>
+<p>
+  A naptáresemények csak addig léteznek, amíg az app fut — bezárás után
+  eltűnnek a memóriából. A Firebase Authenticationben tárolt fiókazonosító
+  addig marad meg, amíg nem kéred a törlését.
+</p>
+
+<h2>Hogyan szüntetheted meg a hozzáférést</h2>
+<ol>
+  <li>Jelentkezz ki az appból, vagy távolítsd el a telefonodról.</li>
+  <li>Vond vissza a naptár-hozzáférést a Google-fiókodban:
+      <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
+  <li>Ha a Firebase-ben tárolt fiókadatod törlését is kéred, írj a fenti
+      e-mail címre.</li>
+</ol>
+
+<h2>Gyerekek</h2>
+<p>Az alkalmazás nem gyerekeknek készült, és nem gyűjt tudatosan gyermekekre vonatkozó adatot.</p>
+
+<h2>A tájékoztató változása</h2>
+<p>
+  Ha az app új funkciót kap, amely más adatot kezel, ez a tájékoztató frissül,
+  és a fenti dátum megváltozik.
+</p>
+
+<nav>
+  <a href="index.html">Kezdőlap</a>
+  <a href="terms.html">Felhasználási feltételek</a>
+</nav>
+
+</body>
+</html>
