@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  Az értesítés-ikont CSAK a Dart oldal hivatkozza, futásidőben, név szerint
+  (AndroidInitializationSettings('ic_notification') -> getIdentifier). A release
+  build erőforrás-zsugorítója ezt nem látja, ezért kidobta a drawable-t, az app
+  pedig induláskor invalid_icon hibával elszállt (debug buildben nincs
+  zsugorítás, ott ezért működött). Ez a fájl mondja meg a zsugorítónak, hogy a
+  runtime-hivatkozott erőforrásokat tartsa meg. Ha újabb, csak Dartból
+  hivatkozott erőforrás kerül be, ide is fel kell venni.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification" />
