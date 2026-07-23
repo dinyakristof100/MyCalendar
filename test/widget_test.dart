@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:my_calendar/app.dart';
 import 'package:my_calendar/features/auth/auth_controller.dart';
 import 'package:my_calendar/features/calendar/calendar_service.dart';
+import 'package:my_calendar/features/calendar/event_groups.dart';
 import 'package:my_calendar/core/prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,6 +20,14 @@ Widget _appWith(AsyncValue<AuthUser?> user) => ProviderScope(
   ],
   child: const MyCalendarApp(),
 );
+
+/// Átvált a megadott fülre az alsó navigációs sávon.
+Future<void> _goTab(WidgetTester tester, String label) async {
+  await tester.tap(
+    find.descendant(of: find.byType(NavigationBar), matching: find.text(label)),
+  );
+  await tester.pumpAndSettle();
+}
 
 void main() {
   // Az app a mentett beállításokat a main-ben tölti be — a teszt ugyanezt
@@ -49,42 +58,71 @@ void main() {
     expect(find.text('Bejelentkezés Google-fiókkal'), findsOneWidget);
   });
 
-  testWidgets('bejelentkezve a főképernyő látszik', (tester) async {
+  testWidgets('bejelentkezve a főképernyő és az alsó navigáció látszik', (
+    tester,
+  ) async {
     await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
     await tester.pumpAndSettle();
-    expect(find.text('Események'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Események'), findsOneWidget);
     expect(find.text('Szabad a két hét'), findsOneWidget);
-  });
-
-  testWidgets('a fejléc hamburgermenüje nyitható', (tester) async {
-    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(EndDrawerButton));
-    await tester.pumpAndSettle();
-    expect(find.text('Teszt'), findsOneWidget);
-    for (final item in ['Események', 'Naptár', 'Edzésnapló', 'Beállítások']) {
-      expect(find.widgetWithText(ListTile, item), findsOneWidget);
+    for (final label in ['Események', 'Naptár', 'Edzésnapló', 'Beállítások']) {
+      expect(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text(label),
+        ),
+        findsOneWidget,
+      );
     }
-    expect(find.text('Kijelentkezés'), findsOneWidget);
   });
 
-  testWidgets('a menüpont átvisz a másik oldalra', (tester) async {
+  testWidgets('a naptár fül a hónapos rácsot mutatja', (tester) async {
     await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(EndDrawerButton));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Naptár'));
-    await tester.pumpAndSettle();
+    await _goTab(tester, 'Naptár');
     expect(find.widgetWithText(AppBar, 'Naptár'), findsOneWidget);
     // A hét napjainak fejléce a naptárrács tetején — a valódi naptárnézet
     // felépült (nem placeholder).
     expect(find.text('Sze'), findsOneWidget);
 
-    // A rendszer vissza gombja az előző oldalra visz, nem lép ki az appból.
+    // A rendszer vissza gombja nem lép ki az appból, hanem a főképernyőre visz.
     final popped = await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(popped, isTrue);
     expect(find.widgetWithText(AppBar, 'Események'), findsOneWidget);
+  });
+
+  testWidgets('oldalra húzva vált a naptár hónapja', (tester) async {
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Naptár');
+
+    final now = DateTime.now();
+    final current = DateTime(now.year, now.month);
+    String header(DateTime m) => '${m.year}. ${monthName(m.month)}';
+    expect(find.text(header(current)), findsOneWidget);
+
+    // Jobbról balra húzás: következő hónap. A húzás a lista látható felső
+    // részéről indul — a rács alja a teszt-ablakban a hajtás alá lóg.
+    await tester.fling(find.byType(ListView), const Offset(-400, 0), 1200);
+    await tester.pumpAndSettle();
+    final next = DateTime(current.year, current.month + 1);
+    expect(find.text(header(next)), findsOneWidget);
+
+    // Balról jobbra húzás: vissza az előzőre.
+    await tester.fling(find.byType(ListView), const Offset(400, 0), 1200);
+    await tester.pumpAndSettle();
+    expect(find.text(header(current)), findsOneWidget);
+  });
+
+  testWidgets('a beállítások fülön a fiók és a kijelentkezés is ott van', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Beállítások');
+    expect(find.text('Teszt'), findsOneWidget);
+    expect(find.text('Kijelentkezés'), findsOneWidget);
   });
 
   testWidgets('a beállított színkészlet az appra is érvényes', (tester) async {
@@ -95,10 +133,7 @@ void main() {
       ThemeMode.system,
     );
 
-    await tester.tap(find.byType(EndDrawerButton));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Beállítások'));
-    await tester.pumpAndSettle();
+    await _goTab(tester, 'Beállítások');
     await tester.tap(find.text('Sötét'));
     await tester.pumpAndSettle();
 
@@ -116,10 +151,7 @@ void main() {
 
     await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(EndDrawerButton));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Edzésnapló'));
-    await tester.pumpAndSettle();
+    await _goTab(tester, 'Edzésnapló');
     expect(find.text('Még nincs edzésterved'), findsOneWidget);
 
     await tester.tap(find.text('Edzésterv létrehozása'));
@@ -162,10 +194,7 @@ void main() {
 
     await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(EndDrawerButton));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Edzésnapló'));
-    await tester.pumpAndSettle();
+    await _goTab(tester, 'Edzésnapló');
     expect(
       find.text('Sima heti terv · ezen a héten 0/2 megvan'),
       findsOneWidget,

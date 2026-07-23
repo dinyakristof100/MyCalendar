@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/app_scaffold.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
 import 'features/calendar/calendar_screen.dart';
@@ -12,6 +13,10 @@ import 'features/workouts/workouts_screen.dart';
 
 /// go_router auth-guarddal: kijelentkezve mindig a /login-ra terel,
 /// bejelentkezve a /login-ról a főképernyőre.
+///
+/// A bejelentkezett oldalak egy [StatefulShellRoute]-ban élnek: az alsó
+/// navigációs sáv minden fülön ott van, és a fülek megőrzik az állapotukat
+/// (a naptár a lapozott hónapot, az edzésnapló a görgetést) váltás közben is.
 final routerProvider = Provider<GoRouter>((ref) {
   // A redirect újrafuttatásához figyeljük az auth állapotot egy Listenable-ön át.
   final refresh = ValueNotifier<AsyncValue<AuthUser?>>(
@@ -34,18 +39,48 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/', builder: (_, _) => const EventsScreen()),
-      GoRoute(path: '/calendar', builder: (_, _) => const CalendarScreen()),
-      GoRoute(
-        path: '/workouts',
-        builder: (_, _) => const WorkoutsScreen(),
-        // Alútvonal, hogy a felvitel a listára tegye rá magát: a fejlécben így
-        // magától megjelenik a vissza nyíl.
-        routes: [
-          GoRoute(path: 'new', builder: (_, _) => const PlanFormScreen()),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => AppShell(shell: shell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/', builder: (_, _) => const EventsScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/calendar',
+                builder: (_, _) => const CalendarScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/workouts',
+                builder: (_, _) => const WorkoutsScreen(),
+                // Alútvonal, hogy a felvitel a listára tegye rá magát: a
+                // fejlécben így magától megjelenik a vissza nyíl.
+                routes: [
+                  GoRoute(
+                    path: 'new',
+                    builder: (_, _) => const PlanFormScreen(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                builder: (_, _) => const SettingsScreen(),
+              ),
+            ],
+          ),
         ],
       ),
-      GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
     ],
   );

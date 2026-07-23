@@ -69,7 +69,9 @@ final _restCache = <int, Set<DateTime>>{};
 /// is ünnep marad.
 DayKind dayKindOf(DateTime day) {
   final d = DateTime(day.year, day.month, day.day);
-  if (_nationalCache.putIfAbsent(d.year, () => _nationalHolidays(d.year)).contains(d)) {
+  if (_nationalCache
+      .putIfAbsent(d.year, () => _nationalHolidays(d.year))
+      .contains(d)) {
     return DayKind.holiday;
   }
   if (_restCache.putIfAbsent(d.year, () => _restDays(d.year)).contains(d)) {
@@ -116,8 +118,14 @@ DayPalette dayPalette(DayKind kind, ThemeData theme) {
       fill: scheme.surfaceContainerHigh,
       accent: scheme.onSurface,
     ),
-    DayKind.weekend => DayPalette(fill: tint(_weekendHue), accent: ink(_weekendHue)),
+    DayKind.weekend => DayPalette(
+      fill: tint(_weekendHue),
+      accent: ink(_weekendHue),
+    ),
     DayKind.restDay => DayPalette(fill: tint(_restHue), accent: ink(_restHue)),
-    DayKind.holiday => DayPalette(fill: tint(_holidayHue), accent: ink(_holidayHue)),
+    DayKind.holiday => DayPalette(
+      fill: tint(_holidayHue),
+      accent: ink(_holidayHue),
+    ),
   };
 }

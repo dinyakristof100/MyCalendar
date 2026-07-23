@@ -69,8 +69,9 @@ class CategoryState {
   EventCategory? of(String eventId) => byId(assignments[eventId]);
 }
 
-final categoriesProvider =
-    NotifierProvider<CategoryController, CategoryState>(CategoryController.new);
+final categoriesProvider = NotifierProvider<CategoryController, CategoryState>(
+  CategoryController.new,
+);
 
 class CategoryController extends Notifier<CategoryState> {
   @override
@@ -233,7 +234,9 @@ class _CategoryPicker extends ConsumerWidget {
                   ? Icon(Icons.check, color: theme.colorScheme.primary)
                   : null,
               onTap: () async {
-                await ref.read(categoriesProvider.notifier).assign(eventId, null);
+                await ref
+                    .read(categoriesProvider.notifier)
+                    .assign(eventId, null);
                 if (context.mounted) Navigator.pop(context);
               },
             ),

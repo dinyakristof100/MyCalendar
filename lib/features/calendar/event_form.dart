@@ -6,15 +6,21 @@ import 'event_groups.dart';
 
 /// Új esemény felvitele. `true`-val záródik, ha az esemény be is került a
 /// naptárba — a hívónak ilyenkor kell frissítenie a listát.
-Future<bool?> showEventForm(BuildContext context) => showModalBottomSheet<bool>(
-  context: context,
-  showDragHandle: true,
-  isScrollControlled: true,
-  builder: (_) => const _EventForm(),
-);
+///
+/// [initialDay]: erre a napra nyílik az űrlap (a naptárból a kijelölt nap).
+/// Múltbeli vagy hiányzó nap esetén a következő egész óra az alapértelmezés.
+Future<bool?> showEventForm(BuildContext context, {DateTime? initialDay}) =>
+    showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => _EventForm(initialDay: initialDay),
+    );
 
 class _EventForm extends StatefulWidget {
-  const _EventForm();
+  const _EventForm({this.initialDay});
+
+  final DateTime? initialDay;
 
   @override
   State<_EventForm> createState() => _EventFormState();
@@ -23,13 +29,22 @@ class _EventForm extends StatefulWidget {
 class _EventFormState extends State<_EventForm> {
   final _title = TextEditingController();
 
-  /// A következő egész óra: a legtöbb esetben így elég a címet beírni.
-  late DateTime _start = _nextHour();
+  late DateTime _start = _initialStart();
   late DateTime _end = _start.add(const Duration(hours: 1));
   bool _saving = false;
 
-  static DateTime _nextHour() {
+  /// Ma (vagy nap nélkül): a következő egész óra — a legtöbb esetben így elég
+  /// a címet beírni. Jövőbeli napra: reggel 9. Múltbeli napra nem nyitunk,
+  /// mert a dátumválasztó is a mai naptól enged választani.
+  DateTime _initialStart() {
     final now = DateTime.now();
+    final day = widget.initialDay;
+    if (day != null) {
+      final target = DateTime(day.year, day.month, day.day);
+      if (target.isAfter(DateTime(now.year, now.month, now.day))) {
+        return DateTime(target.year, target.month, target.day, 9);
+      }
+    }
     // Éjjel 11 után is jó: a DateTime magától átfordul a következő napra.
     return DateTime(now.year, now.month, now.day, now.hour + 1);
   }

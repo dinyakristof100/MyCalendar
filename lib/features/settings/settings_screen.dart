@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_scaffold.dart';
 import '../../core/prefs.dart';
+import '../auth/auth_controller.dart';
 
 const _key = 'themeMode';
 
@@ -30,20 +31,36 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final name = ref.watch(currentUserProvider).value?.name;
+
     return AppScaffold(
       title: 'Beállítások',
       body: ListView(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-            child: Text(
-              'Színkészlet',
-              style: theme.textTheme.titleSmall?.copyWith(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w700,
+          const _SectionTitle('Fiók'),
+          if (name != null)
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: theme.colorScheme.primaryContainer,
+                foregroundColor: theme.colorScheme.onPrimaryContainer,
+                child: Text(
+                  name.characters.first.toUpperCase(),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
+              title: Text(name),
+              subtitle: const Text('Google-fiók'),
             ),
+          ListTile(
+            leading: Icon(Icons.logout, color: theme.colorScheme.error),
+            title: Text(
+              'Kijelentkezés',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+            onTap: signOut,
           ),
+          const Divider(height: 24),
+          const _SectionTitle('Színkészlet'),
           RadioGroup<ThemeMode>(
             groupValue: ref.watch(themeModeProvider),
             onChanged: (mode) {
@@ -72,7 +89,40 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
           ),
+          const Divider(height: 24),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+            child: Text(
+              'A naptáradat a készülékről olvassuk, az edzésterveid a '
+              'telefonon maradnak. Semmi nem kerül szerverre.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      child: Text(
+        text,
+        style: theme.textTheme.titleSmall?.copyWith(
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

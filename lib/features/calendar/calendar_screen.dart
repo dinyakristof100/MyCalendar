@@ -8,6 +8,7 @@ import 'calendar_days.dart';
 import 'calendar_service.dart';
 import 'event_categories.dart';
 import 'event_details.dart';
+import 'event_form.dart';
 import 'event_groups.dart';
 
 const _weekdayLabels = ['H', 'K', 'Sze', 'Cs', 'P', 'Szo', 'V'];
@@ -25,6 +26,7 @@ class CalendarScreen extends ConsumerStatefulWidget {
 class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   late DateTime _month; // DateTime(év, hónap) — a látható hónap.
   late DateTime _selected; // csak dátum — a kijelölt nap.
+  int _slideDir = 1; // az utolsó hónapváltás iránya, a csúszó animációhoz.
   late final AppLifecycleListener _lifecycle;
 
   @override
@@ -45,15 +47,29 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     super.dispose();
   }
 
-  void _shiftMonth(int delta) =>
-      setState(() => _month = DateTime(_month.year, _month.month + delta));
+  void _shiftMonth(int delta) => setState(() {
+    _slideDir = delta.sign;
+    _month = DateTime(_month.year, _month.month + delta);
+  });
 
   void _goToday() {
     final now = DateTime.now();
     setState(() {
+      _slideDir = _month.isAfter(DateTime(now.year, now.month)) ? -1 : 1;
       _month = DateTime(now.year, now.month);
       _selected = DateTime(now.year, now.month, now.day);
     });
+  }
+
+  /// Vízszintes húzás: jobbról balra a következő, balról jobbra az előző
+  /// hónap — mint egy lapozás.
+  void _onSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity <= -300) {
+      _shiftMonth(1);
+    } else if (velocity >= 300) {
+      _shiftMonth(-1);
+    }
   }
 
   /// Napra bontja az eseményeket. Az időpontos, több napon átnyúló esemény
@@ -95,40 +111,56 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
     return AppScaffold(
       title: 'Naptár',
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Új esemény',
+        onPressed: () async {
+          // A kijelölt napra nyílik az űrlap; mentés után a rács és az
+          // eseménylista (emlékeztetőkkel együtt) is frissül.
+          if (await showEventForm(context, initialDay: _selected) ?? false) {
+            ref.invalidate(monthEventsProvider(_month));
+            ref.invalidate(upcomingEventsProvider);
+          }
+        },
+        child: const Icon(Icons.add),
+      ),
       body: RefreshIndicator(
         onRefresh: () => ref.refresh(monthEventsProvider(_month).future),
-        child: switch (async) {
-          AsyncError(:final error)
-              when error is PlatformException &&
-                  error.code == permissionDeniedCode =>
-            _fill(
-              const _Placeholder(
-                icon: Icons.lock_outline,
-                title: 'Engedély kell a naptárhoz',
-                detail:
-                    'Fogadd el a felugró kérdést, majd húzd le az ujjad a '
-                    'frissítéshez.',
+        child: GestureDetector(
+          onHorizontalDragEnd: _onSwipe,
+          child: switch (async) {
+            AsyncError(:final error)
+                when error is PlatformException &&
+                    error.code == permissionDeniedCode =>
+              _fill(
+                const _Placeholder(
+                  icon: Icons.lock_outline,
+                  title: 'Engedély kell a naptárhoz',
+                  detail:
+                      'Fogadd el a felugró kérdést, majd húzd le az ujjad a '
+                      'frissítéshez.',
+                ),
+              ),
+            AsyncError(:final error) => _fill(
+              _Placeholder(
+                icon: Icons.cloud_off_outlined,
+                title: 'Nem sikerült elérni a naptárat',
+                detail: '$error',
               ),
             ),
-          AsyncError(:final error) => _fill(
-            _Placeholder(
-              icon: Icons.cloud_off_outlined,
-              title: 'Nem sikerült elérni a naptárat',
-              detail: '$error',
+            // Töltés közben marad a rács a régi adattal — üres listával indul.
+            _ => _CalendarBody(
+              month: _month,
+              selected: _selected,
+              slideDir: _slideDir,
+              byDay: _byDay(async.value ?? const []),
+              categories: categories,
+              onSelect: (day) => setState(() => _selected = day),
+              onPrev: () => _shiftMonth(-1),
+              onNext: () => _shiftMonth(1),
+              onToday: _goToday,
             ),
-          ),
-          // Töltés közben marad a rács a régi adattal — üres listával indul.
-          _ => _CalendarBody(
-            month: _month,
-            selected: _selected,
-            byDay: _byDay(async.value ?? const []),
-            categories: categories,
-            onSelect: (day) => setState(() => _selected = day),
-            onPrev: () => _shiftMonth(-1),
-            onNext: () => _shiftMonth(1),
-            onToday: _goToday,
-          ),
-        },
+          },
+        ),
       ),
     );
   }
@@ -143,6 +175,7 @@ class _CalendarBody extends StatelessWidget {
   const _CalendarBody({
     required this.month,
     required this.selected,
+    required this.slideDir,
     required this.byDay,
     required this.categories,
     required this.onSelect,
@@ -153,6 +186,7 @@ class _CalendarBody extends StatelessWidget {
 
   final DateTime month;
   final DateTime selected;
+  final int slideDir;
   final Map<DateTime, List<CalendarEvent>> byDay;
   final CategoryState categories;
   final ValueChanged<DateTime> onSelect;
@@ -214,19 +248,45 @@ class _CalendarBody extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: 7,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 6,
-          crossAxisSpacing: 6,
-          childAspectRatio: 0.82,
-          children: tiles,
+        // Hónapváltáskor az új rács a váltás irányából csúszik be, a régi
+        // ellenkező irányba ki — a lapozás érzetét adja a swipe-hoz.
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 260),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            final incoming = child.key == ValueKey(month);
+            final from = (incoming ? slideDir : -slideDir) * 0.18;
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween(
+                  begin: Offset(from, 0),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            );
+          },
+          child: GridView.count(
+            key: ValueKey(month),
+            crossAxisCount: 7,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            childAspectRatio: 0.82,
+            children: tiles,
+          ),
         ),
         const SizedBox(height: 20),
         const _Legend(),
         const SizedBox(height: 24),
-        _SelectedDayHeader(day: selected, today: today, count: dayEvents.length),
+        _SelectedDayHeader(
+          day: selected,
+          today: today,
+          count: dayEvents.length,
+        ),
         const SizedBox(height: 4),
         if (dayEvents.isEmpty)
           Padding(
@@ -361,43 +421,52 @@ class _DayTile extends StatelessWidget {
                 ? Border.all(color: scheme.primary, width: 2)
                 : null,
           ),
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 26,
-                height: 26,
-                alignment: Alignment.center,
-                decoration: isToday
-                    ? BoxDecoration(color: scheme.primary, shape: BoxShape.circle)
-                    : null,
-                child: Text(
-                  '${day.day}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: numberColor,
-                    fontWeight: isToday || isSelected
-                        ? FontWeight.w700
-                        : FontWeight.w500,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          alignment: Alignment.center,
+          // A FittedBox szükség esetén arányosan kicsinyíti a tartalmat, így
+          // a csempe semmilyen képernyőn vagy betűméretnél nem tud túlcsordulni.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: isToday
+                      ? BoxDecoration(
+                          color: scheme.primary,
+                          shape: BoxShape.circle,
+                        )
+                      : null,
+                  child: Text(
+                    '${day.day}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: numberColor,
+                      fontWeight: isToday || isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              // Fix magasság, hogy az eltérő eseményszám ne ugráltassa a rácsot.
-              SizedBox(
-                height: 6,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    for (final color in dots)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                        child: CategoryDot(color: color, size: 6),
-                      ),
-                  ],
+                const SizedBox(height: 4),
+                // Fix magasság, hogy az eltérő eseményszám ne ugráltassa a rácsot.
+                SizedBox(
+                  height: 6,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final color in dots)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                          child: CategoryDot(color: color, size: 6),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -428,7 +497,10 @@ class _Legend extends StatelessWidget {
                   color: dayPalette(kind, theme).fill,
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
-                    color: dayPalette(kind, theme).accent.withValues(alpha: 0.5),
+                    color: dayPalette(
+                      kind,
+                      theme,
+                    ).accent.withValues(alpha: 0.5),
                   ),
                 ),
               ),
