@@ -23,7 +23,9 @@ Future<void> initNotifications({
     settings: const InitializationSettings(
       // Sziluett-ikon, nem a launcher ikon: a status bar egyszínűre maszkolja,
       // a színes adaptive iconból fehér paca lenne.
-      android: AndroidInitializationSettings('@drawable/ic_notification'),
+      // Puszta drawable-név, NEM '@drawable/...': a plugin getIdentifier-rel
+      // oldja fel, az előtagra induláskor invalid_icon hibával elszáll.
+      android: AndroidInitializationSettings('ic_notification'),
       iOS: DarwinInitializationSettings(),
     ),
     onDidReceiveNotificationResponse: (response) {
