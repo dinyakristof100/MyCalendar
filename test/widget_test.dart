@@ -6,6 +6,7 @@ import 'package:my_calendar/app.dart';
 import 'package:my_calendar/features/auth/auth_controller.dart';
 import 'package:my_calendar/features/calendar/calendar_service.dart';
 import 'package:my_calendar/features/calendar/event_groups.dart';
+import 'package:my_calendar/features/workouts/motivation.dart';
 import 'package:my_calendar/core/prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -200,6 +201,12 @@ void main() {
       findsOneWidget,
     );
 
+    // Amíg a hét nincs meg, a gondolkodtató kártya látszik a napi párossal.
+    final reflection = reflectionFor(DateTime.now());
+    expect(find.text('MIÉRT ÉRI MEG MA?'), findsOneWidget);
+    expect(find.text(reflection.gain), findsOneWidget);
+    expect(find.text(reflection.cost), findsOneWidget);
+
     // Koppintásra nem történik semmi — csak hosszú nyomásra kérdez.
     await tester.tap(find.text('mell, tricepsz'));
     await tester.pumpAndSettle();
@@ -216,7 +223,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.check_circle), findsNothing);
 
-    // Megerősítve viszont kipipálódik.
+    // Megerősítve viszont kipipálódik, és dicséret jár érte.
     await tester.longPress(find.text('mell, tricepsz'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Igen, megvolt'));
@@ -226,6 +233,14 @@ void main() {
       find.text('Sima heti terv · ezen a héten 1/2 megvan'),
       findsOneWidget,
     );
+    expect(
+      find.text(praiseFor(done: 1, total: 2, day: DateTime.now())),
+      findsOneWidget,
+    );
+    // A SnackBar magától eltűnik — a lejáratát is lepörgetjük, hogy ne
+    // maradjon függő időzítő a teszt végén.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
 
     // A kipipált nap nem nyitja meg újra a kérdést.
     await tester.longPress(find.text('mell, tricepsz'));

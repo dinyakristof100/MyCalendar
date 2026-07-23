@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/app_scaffold.dart';
 import '../../core/ui.dart';
+import 'motivation.dart';
 import 'workout_plans.dart';
 import 'workout_progress.dart';
 
@@ -132,6 +133,24 @@ class _PlanView extends ConsumerWidget {
     );
     if (yes ?? false) {
       await ref.read(workoutProgressProvider.notifier).markDone(plan, day);
+      if (!context.mounted) return;
+      // Motiváció a pipa mellé — a hét utolsó edzése külön ünneplést kap.
+      final now = DateTime.now();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          content: Text(
+            praiseFor(
+              done: ref.read(workoutProgressProvider).doneFor(plan, now).length,
+              total: plan.daysOfWeekAt(now).length,
+              day: now,
+            ),
+          ),
+        ),
+      );
     }
   }
 
@@ -183,6 +202,11 @@ class _PlanView extends ConsumerWidget {
                 : theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        const SizedBox(height: 14),
+        Appear(
+          index: slot++,
+          child: _MotivationCard(weekDone: done.length >= days),
+        ),
         for (var week = 0; week < plan.weeks.length; week++) ...[
           if (plan.hasBWeek)
             _WeekHeader(
@@ -205,6 +229,108 @@ class _PlanView extends ConsumerWidget {
               ),
             ),
         ],
+      ],
+    );
+  }
+}
+
+/// A „lite" gondolkodtató: amíg a hét nincs meg, naponta forgó párosban
+/// mutatja, mit nyersz az edzéssel és mit veszítesz a kihagyással. Kész hétnél
+/// zöld gratuláció — a kártya ilyenkor sem tűnik el, hogy a hely ne ugráljon.
+class _MotivationCard extends StatelessWidget {
+  const _MotivationCard({required this.weekDone});
+
+  final bool weekDone;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (weekDone) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
+        decoration: BoxDecoration(
+          color: _done.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: _done.withValues(alpha: 0.55)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.emoji_events_outlined, color: _done),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'A heti terv kész — minden edzés megvan. Jöhet a pihenés!',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: _done,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final reflection = reflectionFor(DateTime.now());
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+      decoration: cardSurface(theme),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'MIÉRT ÉRI MEG MA?',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _ReflectionLine(
+            icon: Icons.trending_up,
+            color: _done,
+            text: reflection.gain,
+          ),
+          const SizedBox(height: 8),
+          _ReflectionLine(
+            icon: Icons.trending_down,
+            color: theme.colorScheme.error,
+            text: reflection.cost,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReflectionLine extends StatelessWidget {
+  const _ReflectionLine({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
+          ),
+        ),
       ],
     );
   }

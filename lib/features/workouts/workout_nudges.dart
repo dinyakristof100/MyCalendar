@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/notifications.dart';
+import 'motivation.dart';
 import 'workout_plans.dart';
 import 'workout_progress.dart';
 
@@ -78,7 +79,9 @@ Future<void> syncWorkoutNudges({
     await notifications.zonedSchedule(
       id: workoutIdBase + day,
       title: 'Megvolt a mai edzés?',
-      body: '${plan.name} — pipáld ki, melyik napot csináltad meg.',
+      // A napi gondolkodtató egysoros: ugyanazt mondja, amit aznap az
+      // edzésnapló kártyája — determinisztikus, ezért előre ütemezhető.
+      body: '${plan.name} — ${nudgeLineFor(date)}',
       // A koppintás ide visz: az edzésnaplóban lehet pipálni.
       payload: '/workouts',
       scheduledDate: tz.TZDateTime.from(at, tz.UTC),
