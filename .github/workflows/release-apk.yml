@@ -1,0 +1,72 @@
+name: Release APK
+
+# Push-ra (app-változás a main-en) magától buildel egy release APK-t es feltolti
+# GitHub Release-be 'mycalendar.apk' neven. A weboldal gombja a
+# releases/latest/download/mycalendar.apk linkre mutat -> mindig ezt tolti.
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'assets/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/release-apk.yml'
+  workflow_dispatch:        # kézi indítás az Actions fülről (teszteléshez)
+
+permissions:
+  contents: write           # release + tag létrehozásához kell
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.7'   # a helyi géped verziója, pinnelve
+          channel: stable
+          cache: true
+
+      # A telefonoddal AZONOS debug kulcs visszaállítása a secretből.
+      # Ugyanaz a kulcs -> felül-telepítés megy + a Firebase SHA-1 stimmel
+      # (nincs Google-bejelentkezés törés, nincs egyszeri újratelepítés).
+      - name: Debug keystore visszaállítása
+        env:
+          KS_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error::Hiányzik a DEBUG_KEYSTORE_B64 secret. Add hozzá: Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          mkdir -p ~/.android
+          printf '%s' "$KS_B64" | base64 -d > ~/.android/debug.keystore
+
+      # versionName a pubspec-ből, versionCode a futásszámból (>3, monoton nő).
+      - name: Verzió számítása
+        run: |
+          NAME=$(grep -E '^version:' pubspec.yaml | sed -E 's/^version:[[:space:]]*//; s/\+.*//')
+          echo "VNAME=$NAME" >> "$GITHUB_ENV"
+          echo "VC=$((1000 + ${{ github.run_number }}))" >> "$GITHUB_ENV"
+
+      - run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release --build-name="$VNAME" --build-number="$VC"
+
+      - name: APK átnevezése (állandó név a stabil linkhez)
+        run: cp build/app/outputs/flutter-apk/app-release.apk mycalendar.apk
+
+      - name: Release közzététele
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VNAME }}+${{ env.VC }}
+          name: v${{ env.VNAME }}+${{ env.VC }}
+          files: mycalendar.apk
+          fail_on_unmatched_files: true
