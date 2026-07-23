@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# release.ps1 ideiglenes APK-masolata a repo gyokereben (kiadas Release-be megy, nem gitbe)
+/*.apk
