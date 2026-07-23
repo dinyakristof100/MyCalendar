@@ -123,3 +123,31 @@ final upcomingEventsProvider = FutureProvider<List<CalendarEvent>>((ref) async {
       parseEvent((event! as Map).cast<String, Object?>()),
   ];
 });
+
+/// A naptárrács hat sora bármely hónapot lefed.
+const gridDays = 42;
+
+/// A [month] rácsának első napja: a hónap 1-jét tartalmazó hét hétfője. A magyar
+/// hét hétfővel kezdődik, ezért `weekday - 1` napot lépünk vissza.
+DateTime gridStart(DateTime month) {
+  final first = DateTime(month.year, month.month, 1);
+  return DateTime(first.year, first.month, first.day - (first.weekday - 1));
+}
+
+/// Egy hónap rácsát (42 nap) lefedő események az eszköz naptárából.
+///
+/// A kulcs a hónap első napja `DateTime(év, hónap, 1)` — a [DateTime]
+/// értékegyenlőségével a család példányonként cache-el.
+final monthEventsProvider =
+    FutureProvider.family<List<CalendarEvent>, DateTime>((ref, month) async {
+      final start = gridStart(month);
+      final end = DateTime(start.year, start.month, start.day + gridDays);
+      final raw = await _channel.invokeMethod<List<Object?>>('eventsInRange', {
+        'begin': start.millisecondsSinceEpoch,
+        'end': end.millisecondsSinceEpoch,
+      });
+      return [
+        for (final event in raw ?? const <Object?>[])
+          parseEvent((event! as Map).cast<String, Object?>()),
+      ];
+    });

@@ -40,6 +40,7 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "upcomingEvents" -> handleUpcomingEvents(call.argument<Int>("days") ?: 14, result)
+                    "eventsInRange" -> handleEventsInRange(call, result)
                     "createEvent" -> handleCreateEvent(call, result)
                     else -> result.notImplemented()
                 }
@@ -54,23 +55,45 @@ class MainActivity : FlutterActivity() {
     private var permissionAsked = false
 
     private fun handleUpcomingEvents(days: Int, result: MethodChannel.Result) {
-        if (!has(Manifest.permission.READ_CALENDAR)) {
-            // Felkérjük az engedélyt, de nem várunk rá: a Dart oldal hibaként
-            // kapja meg, és a megadás után az előtérbe kerülés úgyis újralekér.
-            // Így nem kell a permission-callback köré aszinkron állapotgépet
-            // építeni egyetlen lekérdezés miatt.
-            if (!permissionAsked) {
-                permissionAsked = true
-                requestCalendarPermissions()
-            }
-            result.error("PERMISSION_DENIED", "Nincs naptár-olvasási engedély.", null)
-            return
-        }
+        if (!ensureReadPermission(result)) return
         try {
-            result.success(queryEvents(days))
+            val begin = System.currentTimeMillis()
+            result.success(queryRange(begin, begin + days * 24L * 60L * 60L * 1000L))
         } catch (e: Exception) {
             result.error("QUERY_FAILED", e.message, null)
         }
+    }
+
+    /** A naptár egy tetszőleges [begin, end) ablakának eseményei — a naptárnézet
+     * hónapról hónapra ezt kéri. */
+    private fun handleEventsInRange(call: MethodCall, result: MethodChannel.Result) {
+        if (!ensureReadPermission(result)) return
+        try {
+            result.success(
+                queryRange(
+                    call.argument<Number>("begin")!!.toLong(),
+                    call.argument<Number>("end")!!.toLong(),
+                ),
+            )
+        } catch (e: Exception) {
+            result.error("QUERY_FAILED", e.message, null)
+        }
+    }
+
+    /**
+     * Olvasási engedély megléte. Ha nincs, felkérjük (élettartamonként egyszer),
+     * de nem várunk rá: a Dart oldal hibaként kapja, és a megadás utáni előtérbe
+     * kerülés úgyis újralekér. Így nem kell a permission-callback köré aszinkron
+     * állapotgépet építeni egyetlen lekérdezés miatt.
+     */
+    private fun ensureReadPermission(result: MethodChannel.Result): Boolean {
+        if (has(Manifest.permission.READ_CALENDAR)) return true
+        if (!permissionAsked) {
+            permissionAsked = true
+            requestCalendarPermissions()
+        }
+        result.error("PERMISSION_DENIED", "Nincs naptár-olvasási engedély.", null)
+        return false
     }
 
     private fun handleCreateEvent(call: MethodCall, result: MethodChannel.Result) {
@@ -155,10 +178,7 @@ class MainActivity : FlutterActivity() {
      * Egész napos eseménynél a BEGIN érték **UTC éjfél**, nem helyi idő. A
      * Dart oldal ezt tudja, és nem vált időzónát rajta.
      */
-    private fun queryEvents(days: Int): List<Map<String, Any?>> {
-        val begin = System.currentTimeMillis()
-        val end = begin + days * 24L * 60L * 60L * 1000L
-
+    private fun queryRange(begin: Long, end: Long): List<Map<String, Any?>> {
         val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().let {
             ContentUris.appendId(it, begin)
             ContentUris.appendId(it, end)

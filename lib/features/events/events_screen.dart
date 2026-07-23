@@ -6,6 +6,7 @@ import '../../core/app_scaffold.dart';
 import '../../core/ui.dart';
 import '../auth/auth_controller.dart';
 import '../calendar/calendar_service.dart';
+import '../calendar/event_categories.dart';
 import '../calendar/event_details.dart';
 import '../calendar/event_form.dart';
 import '../calendar/event_groups.dart';
@@ -158,18 +159,19 @@ class _EventList extends StatelessWidget {
 
 /// A képernyő tézise: mi jön legközelebb. Ezért nyitja meg az app valaki —
 /// nem azért, hogy listát olvasson.
-class _NextUpCard extends StatelessWidget {
+class _NextUpCard extends ConsumerWidget {
   const _NextUpCard({required this.event, required this.today});
 
   final CalendarEvent event;
   final DateTime today;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final time = formatTime(event);
     final when = dayLabel(event.at, today: today);
+    final category = ref.watch(categoriesProvider).of(event.id);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(_gutter, 4, _gutter, 8),
@@ -226,6 +228,25 @@ class _NextUpCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (category != null) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CategoryDot(color: category.color, size: 10),
+                      const SizedBox(width: 8),
+                      Text(
+                        category.name,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: scheme.onPrimaryContainer.withValues(
+                            alpha: 0.9,
+                          ),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -271,16 +292,19 @@ class _DayHeader extends StatelessWidget {
   }
 }
 
-class _EventCard extends StatelessWidget {
+class _EventCard extends ConsumerWidget {
   const _EventCard({required this.event});
 
   final CalendarEvent event;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final time = formatTime(event);
+    final category = ref.watch(categoriesProvider).of(event.id);
+    // Kategóriás eseménynél a kategória színe, egyébként a téma akcentje.
+    final accent = category?.color ?? scheme.primary;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(_gutter, 5, _gutter, 5),
@@ -289,26 +313,69 @@ class _EventCard extends StatelessWidget {
         child: InkWell(
           onTap: () => showEventDetails(context, event),
           borderRadius: BorderRadius.circular(22),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 15, 18, 17),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  time ?? 'EGÉSZ NAP',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: scheme.primary,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: time == null ? 1.2 : 0.2,
-                    // Egyforma szélességű számjegyek, hogy az órák a kártyák
-                    // között is egy vonalba essenek.
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                // Bal oldali színsáv csak akkor, ha van kategória — enélkül a
+                // kártya a régi, letisztult formáját tartja.
+                if (category != null)
+                  Container(
+                    width: 5,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(22),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  event.title,
-                  style: theme.textTheme.titleMedium?.copyWith(height: 1.25),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      category != null ? 14 : 18,
+                      15,
+                      18,
+                      17,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              time ?? 'EGÉSZ NAP',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: accent,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: time == null ? 1.2 : 0.2,
+                                // Egyforma szélességű számjegyek, hogy az órák a
+                                // kártyák között is egy vonalba essenek.
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                            if (category != null) ...[
+                              const Spacer(),
+                              Text(
+                                category.name,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          event.title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            height: 1.25,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),

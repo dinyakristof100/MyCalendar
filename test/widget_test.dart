@@ -34,6 +34,13 @@ void main() {
           const MethodChannel('dexterous.com/flutter/local_notifications'),
           (_) async => null,
         );
+    // A naptárnézet a hónap eseményeit a natív csatornán kéri — üres naptárt
+    // adunk vissza, hogy a rács adat nélkül is felépüljön.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('mycalendar/device_calendar'),
+          (_) async => <Object?>[],
+        );
   });
 
   testWidgets('kijelentkezve a login képernyőre terel', (tester) async {
@@ -69,7 +76,9 @@ void main() {
     await tester.tap(find.widgetWithText(ListTile, 'Naptár'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Naptár'), findsOneWidget);
-    expect(find.text('Hamarosan'), findsOneWidget);
+    // A hét napjainak fejléce a naptárrács tetején — a valódi naptárnézet
+    // felépült (nem placeholder).
+    expect(find.text('Sze'), findsOneWidget);
 
     // A rendszer vissza gombja az előző oldalra visz, nem lép ki az appból.
     final popped = await tester.binding.handlePopRoute();

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'calendar_service.dart';
+import 'event_categories.dart';
 import 'event_groups.dart';
 
 /// Az esemény részletei alulról felcsúszó lapon.
@@ -17,16 +19,17 @@ Future<void> showEventDetails(BuildContext context, CalendarEvent event) {
   );
 }
 
-class _EventDetails extends StatelessWidget {
+class _EventDetails extends ConsumerWidget {
   const _EventDetails({required this.event});
 
   final CalendarEvent event;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final time = formatTime(event);
     final end = event.end;
+    final category = ref.watch(categoriesProvider).of(event.id);
 
     return SafeArea(
       child: ConstrainedBox(
@@ -46,6 +49,8 @@ class _EventDetails extends StatelessWidget {
                   height: 1.2,
                 ),
               ),
+              const SizedBox(height: 14),
+              _CategoryChip(category: category, event: event),
               const SizedBox(height: 20),
               _Detail(
                 icon: Icons.event_outlined,
@@ -63,6 +68,52 @@ class _EventDetails extends StatelessWidget {
                 _Detail(icon: Icons.place_outlined, text: location),
               if (event.description case final description?)
                 _Detail(icon: Icons.notes_outlined, text: description),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A kategória kiválasztható „csipesze". Kategória nélkül felkínálja a
+/// hozzáadást; kategóriával a színt és a nevet mutatja, koppintásra átállítható.
+class _CategoryChip extends StatelessWidget {
+  const _CategoryChip({required this.category, required this.event});
+
+  final EventCategory? category;
+  final CalendarEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final color = category?.color ?? scheme.onSurfaceVariant;
+
+    return Material(
+      color: color.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: () => showCategoryPicker(context, event.id),
+        borderRadius: BorderRadius.circular(999),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                category == null ? Icons.label_outline : Icons.label,
+                size: 18,
+                color: color,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                category?.name ?? 'Kategória hozzáadása',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: category == null ? scheme.onSurfaceVariant : color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),

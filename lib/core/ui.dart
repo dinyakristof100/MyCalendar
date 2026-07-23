@@ -64,9 +64,11 @@ class _AppearState extends State<Appear> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     // A késleltetést timer adja, nem Interval — így a lista hosszától
-    // függetlenül minden elem ugyanolyan gyorsan úszik be.
+    // függetlenül minden elem ugyanolyan gyorsan úszik be. A lépcsőt maximáljuk:
+    // enélkül a hosszú lista utolsó kártyái másodpercekig 0 opacitáson (üres
+    // háttéren) ragadnak, és görgetéskor csak üres helyet látni belőlük.
     _delay = Timer(
-      Duration(milliseconds: 45 * widget.index),
+      Duration(milliseconds: 45 * widget.index.clamp(0, 6).toInt()),
       _controller.forward,
     );
   }

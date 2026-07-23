@@ -40,6 +40,9 @@ const _months = [
   'december',
 ];
 
+/// A hónap magyar neve (1 = január).
+String monthName(int month) => _months[month - 1];
+
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
 /// „Ma”, „Holnap”, egyébként „július 25., szombat”.

@@ -1,0 +1,622 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/app_scaffold.dart';
+import '../auth/auth_controller.dart';
+import 'calendar_days.dart';
+import 'calendar_service.dart';
+import 'event_categories.dart';
+import 'event_details.dart';
+import 'event_groups.dart';
+
+const _weekdayLabels = ['H', 'K', 'Sze', 'Cs', 'P', 'Szo', 'V'];
+
+/// A naptár hónapnézete: minden nap egy csempe, a napok típusuk szerint
+/// színezve, az eseményekhez tartozó kategóriaszínek pöttyökkel. Eseményt itt
+/// nem lehet létrehozni — a naptár olvasónézet, mint egy telefonos naptár.
+class CalendarScreen extends ConsumerStatefulWidget {
+  const CalendarScreen({super.key});
+
+  @override
+  ConsumerState<CalendarScreen> createState() => _CalendarScreenState();
+}
+
+class _CalendarScreenState extends ConsumerState<CalendarScreen> {
+  late DateTime _month; // DateTime(év, hónap) — a látható hónap.
+  late DateTime _selected; // csak dátum — a kijelölt nap.
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _month = DateTime(now.year, now.month);
+    _selected = DateTime(now.year, now.month, now.day);
+    // Előtérbe kerüléskor a naptár változhatott — újralekérjük a látható hónapot.
+    _lifecycle = AppLifecycleListener(
+      onResume: () => ref.invalidate(monthEventsProvider(_month)),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  void _shiftMonth(int delta) =>
+      setState(() => _month = DateTime(_month.year, _month.month + delta));
+
+  void _goToday() {
+    final now = DateTime.now();
+    setState(() {
+      _month = DateTime(now.year, now.month);
+      _selected = DateTime(now.year, now.month, now.day);
+    });
+  }
+
+  /// Napra bontja az eseményeket. Az időpontos, több napon átnyúló esemény
+  /// minden érintett napra felkerül — mint egy telefonos naptárban.
+  ///
+  /// ponytail: az egész napos eseménynek nincs záró dátuma a modellben (az
+  /// Android UTC-éjfelet ad, lásd `parseEvent`), ezért az csak a kezdőnapján
+  /// jelenik meg. Egy 60 napos felső korlát megvéd a hibás, extrém hosszú
+  /// eseményektől.
+  Map<DateTime, List<CalendarEvent>> _byDay(List<CalendarEvent> events) {
+    final map = <DateTime, List<CalendarEvent>>{};
+    for (final event in events) {
+      final start = DateTime(event.at.year, event.at.month, event.at.day);
+      final endAt = event.end;
+      final end = endAt == null
+          ? start
+          : DateTime(endAt.year, endAt.month, endAt.day);
+      var day = start;
+      var guard = 0;
+      while (!day.isAfter(end) && guard < 60) {
+        map.putIfAbsent(day, () => []).add(event);
+        day = DateTime(day.year, day.month, day.day + 1);
+        guard++;
+      }
+    }
+    return map;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Amíg a mentett munkamenet töltődik, nem tudjuk, van-e bejelentkezett
+    // felhasználó — a naptár-lekérés (és az engedélykérés) ilyenkor nem indulhat.
+    if (ref.watch(currentUserProvider).isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final async = ref.watch(monthEventsProvider(_month));
+    final categories = ref.watch(categoriesProvider);
+
+    return AppScaffold(
+      title: 'Naptár',
+      body: RefreshIndicator(
+        onRefresh: () => ref.refresh(monthEventsProvider(_month).future),
+        child: switch (async) {
+          AsyncError(:final error)
+              when error is PlatformException &&
+                  error.code == permissionDeniedCode =>
+            _fill(
+              const _Placeholder(
+                icon: Icons.lock_outline,
+                title: 'Engedély kell a naptárhoz',
+                detail:
+                    'Fogadd el a felugró kérdést, majd húzd le az ujjad a '
+                    'frissítéshez.',
+              ),
+            ),
+          AsyncError(:final error) => _fill(
+            _Placeholder(
+              icon: Icons.cloud_off_outlined,
+              title: 'Nem sikerült elérni a naptárat',
+              detail: '$error',
+            ),
+          ),
+          // Töltés közben marad a rács a régi adattal — üres listával indul.
+          _ => _CalendarBody(
+            month: _month,
+            selected: _selected,
+            byDay: _byDay(async.value ?? const []),
+            categories: categories,
+            onSelect: (day) => setState(() => _selected = day),
+            onPrev: () => _shiftMonth(-1),
+            onNext: () => _shiftMonth(1),
+            onToday: _goToday,
+          ),
+        },
+      ),
+    );
+  }
+
+  Widget _fill(Widget child) => ListView(
+    physics: const AlwaysScrollableScrollPhysics(),
+    children: [SizedBox(height: 480, child: child)],
+  );
+}
+
+class _CalendarBody extends StatelessWidget {
+  const _CalendarBody({
+    required this.month,
+    required this.selected,
+    required this.byDay,
+    required this.categories,
+    required this.onSelect,
+    required this.onPrev,
+    required this.onNext,
+    required this.onToday,
+  });
+
+  final DateTime month;
+  final DateTime selected;
+  final Map<DateTime, List<CalendarEvent>> byDay;
+  final CategoryState categories;
+  final ValueChanged<DateTime> onSelect;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final VoidCallback onToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = gridStart(month);
+    final isCurrentMonth = month.year == now.year && month.month == now.month;
+
+    final tiles = List.generate(gridDays, (i) {
+      final day = DateTime(start.year, start.month, start.day + i);
+      return _DayTile(
+        day: day,
+        inMonth: day.month == month.month,
+        isToday: day == today,
+        isSelected: day == selected,
+        events: byDay[day] ?? const [],
+        categories: categories,
+        onTap: () => onSelect(day),
+      );
+    });
+
+    final dayEvents = _sorted(byDay[selected] ?? const []);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+      children: [
+        _MonthHeader(
+          month: month,
+          showToday: !isCurrentMonth,
+          onPrev: onPrev,
+          onNext: onNext,
+          onToday: onToday,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            for (var i = 0; i < 7; i++)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    _weekdayLabels[i],
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: i >= 5
+                          ? dayPalette(DayKind.weekend, theme).accent
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          childAspectRatio: 0.82,
+          children: tiles,
+        ),
+        const SizedBox(height: 20),
+        const _Legend(),
+        const SizedBox(height: 24),
+        _SelectedDayHeader(day: selected, today: today, count: dayEvents.length),
+        const SizedBox(height: 4),
+        if (dayEvents.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                'Nincs esemény ezen a napon',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          )
+        else
+          for (final event in dayEvents) _DayEventTile(event: event),
+      ],
+    );
+  }
+
+  /// Egy napon belül az egész naposak elöl, utána kezdés szerint.
+  List<CalendarEvent> _sorted(List<CalendarEvent> events) =>
+      [...events]..sort((a, b) {
+        if (a.allDay != b.allDay) return a.allDay ? -1 : 1;
+        return a.at.compareTo(b.at);
+      });
+}
+
+class _MonthHeader extends StatelessWidget {
+  const _MonthHeader({
+    required this.month,
+    required this.showToday,
+    required this.onPrev,
+    required this.onNext,
+    required this.onToday,
+  });
+
+  final DateTime month;
+  final bool showToday;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final VoidCallback onToday;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        IconButton(
+          onPressed: onPrev,
+          icon: const Icon(Icons.chevron_left),
+          tooltip: 'Előző hónap',
+        ),
+        Expanded(
+          child: Column(
+            children: [
+              Text(
+                '${month.year}. ${monthName(month.month)}',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (showToday)
+                TextButton(
+                  onPressed: onToday,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Ugrás a mai napra'),
+                ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right),
+          tooltip: 'Következő hónap',
+        ),
+      ],
+    );
+  }
+}
+
+class _DayTile extends StatelessWidget {
+  const _DayTile({
+    required this.day,
+    required this.inMonth,
+    required this.isToday,
+    required this.isSelected,
+    required this.events,
+    required this.categories,
+    required this.onTap,
+  });
+
+  final DateTime day;
+  final bool inMonth;
+  final bool isToday;
+  final bool isSelected;
+  final List<CalendarEvent> events;
+  final CategoryState categories;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final palette = dayPalette(dayKindOf(day), theme);
+
+    // Legfeljebb négy pötty: a kategóriás esemény a kategória színét kapja, a
+    // kategória nélküli semleges szürkét — így a kategóriás kiemelkedik.
+    final dots = <Color>[];
+    for (final event in events) {
+      dots.add(categories.of(event.id)?.color ?? scheme.onSurfaceVariant);
+      if (dots.length >= 4) break;
+    }
+
+    final numberColor = isToday
+        ? scheme.onPrimary
+        : (inMonth ? palette.accent : palette.accent.withValues(alpha: 0.45));
+
+    final tile = Material(
+      color: palette.fill,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: isSelected
+                ? Border.all(color: scheme.primary, width: 2)
+                : null,
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: isToday
+                    ? BoxDecoration(color: scheme.primary, shape: BoxShape.circle)
+                    : null,
+                child: Text(
+                  '${day.day}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: numberColor,
+                    fontWeight: isToday || isSelected
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              // Fix magasság, hogy az eltérő eseményszám ne ugráltassa a rácsot.
+              SizedBox(
+                height: 6,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (final color in dots)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                        child: CategoryDot(color: color, size: 6),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return inMonth ? tile : Opacity(opacity: 0.55, child: tile);
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      children: [
+        for (final kind in DayKind.values)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: dayPalette(kind, theme).fill,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: dayPalette(kind, theme).accent.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(dayKindLabel(kind), style: theme.textTheme.labelSmall),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+class _SelectedDayHeader extends StatelessWidget {
+  const _SelectedDayHeader({
+    required this.day,
+    required this.today,
+    required this.count,
+  });
+
+  final DateTime day;
+  final DateTime today;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Text(
+            dayLabel(day, today: today),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        if (count > 0)
+          Text(
+            count == 1 ? '1 esemény' : '$count esemény',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// A kijelölt nap egy eseménye. A kategória színe bal oldali sávként és az
+/// időpont színeként is megjelenik.
+class _DayEventTile extends ConsumerWidget {
+  const _DayEventTile({required this.event});
+
+  final CalendarEvent event;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final category = ref.watch(categoriesProvider).of(event.id);
+    final accent = category?.color ?? scheme.primary;
+    final time = formatTime(event);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Ink(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: InkWell(
+          onTap: () => showEventDetails(context, event),
+          borderRadius: BorderRadius.circular(16),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 5,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(16),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              time ?? 'EGÉSZ NAP',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: accent,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: time == null ? 1.2 : 0.2,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                            if (category != null) ...[
+                              const Spacer(),
+                              Text(
+                                category.name,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          event.title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            height: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Üres- és hibaállapotok közös váza (a naptárnézet saját, egyszerűbb változata).
+class _Placeholder extends StatelessWidget {
+  const _Placeholder({
+    required this.icon,
+    required this.title,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 24, 40, 24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              size: 40,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            detail,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

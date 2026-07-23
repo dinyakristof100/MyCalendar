@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'core/app_scaffold.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/auth/login_screen.dart';
+import 'features/calendar/calendar_screen.dart';
 import 'features/events/events_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/workouts/plan_form_screen.dart';
@@ -35,7 +35,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/', builder: (_, _) => const EventsScreen()),
-      GoRoute(path: '/calendar', builder: (_, _) => const _Soon('Naptár')),
+      GoRoute(path: '/calendar', builder: (_, _) => const CalendarScreen()),
       GoRoute(
         path: '/workouts',
         builder: (_, _) => const WorkoutsScreen(),
@@ -50,29 +50,3 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-
-/// Még meg nem épült oldalak: a menüpont már működik, a tartalom jön.
-///
-/// ponytail: egy közös üres oldal három külön képernyőfájl helyett — amelyik
-/// megépül, az kap saját fájlt és lecseréli itt ezt a sort.
-class _Soon extends StatelessWidget {
-  const _Soon(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AppScaffold(
-      title: title,
-      body: Center(
-        child: Text(
-          'Hamarosan',
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-}
