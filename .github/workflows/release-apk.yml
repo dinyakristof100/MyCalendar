@@ -34,10 +34,11 @@ jobs:
           channel: stable
           cache: true
 
-      # A telefonoddal AZONOS debug kulcs visszaállítása a secretből.
-      # Ugyanaz a kulcs -> felül-telepítés megy + a Firebase SHA-1 stimmel
-      # (nincs Google-bejelentkezés törés, nincs egyszeri újratelepítés).
-      - name: Debug keystore visszaállítása
+      # A telefonoddal AZONOS debug kulcs visszaállítása a secretből egy explicit
+      # fájlba, amit a gradle a RELEASE_KEYSTORE env-en át HASZNÁL (nem az AGP
+      # implicit ~/.android helyére hagyatkozunk — az a CI-n más kulcsot adott).
+      # Ugyanaz a kulcs -> felül-telepítés megy + a Firebase SHA-1 stimmel.
+      - name: Release keystore a secretből
         env:
           KS_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
         run: |
@@ -45,8 +46,8 @@ jobs:
             echo "::error::Hiányzik a DEBUG_KEYSTORE_B64 secret. Add hozzá: Settings -> Secrets and variables -> Actions."
             exit 1
           fi
-          mkdir -p ~/.android
-          printf '%s' "$KS_B64" | base64 -d > ~/.android/debug.keystore
+          printf '%s' "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
 
       # versionName a pubspec-ből, versionCode a futásszámból (>3, monoton nő).
       - name: Verzió számítása
@@ -59,6 +60,13 @@ jobs:
 
       - name: Build release APK
         run: flutter build apk --release --build-name="$VNAME" --build-number="$VC"
+
+      # Ellenőrzés a logban: melyik kulccsal írtunk alá. A helyi/Firebase kulcs
+      # SHA-1-e: 0e:51:60:20:9c:e1:9b:38:2d:28:5b:f9:f2:7f:88:05:d8:87:8a:02
+      - name: Aláíró kulcs a logba
+        run: |
+          AS=$(ls "$ANDROID_SDK_ROOT"/build-tools/*/apksigner | sort -V | tail -1)
+          "$AS" verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -i "SHA-1" || true
 
       - name: APK átnevezése (állandó név a stabil linkhez)
         run: cp build/app/outputs/flutter-apk/app-release.apk mycalendar.apk

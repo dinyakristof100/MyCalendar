@@ -31,11 +31,30 @@ android {
         versionName = flutter.versionName
     }
 
+    // Release aláírás. CI-ben a RELEASE_KEYSTORE env a secretből visszaállított
+    // kulcsra mutat; helyben nincs env, marad a debug kulcs. A secret a géped
+    // debug kulcsát tartalmazza -> a CI UGYANAZZAL a kulccsal ír alá, ami a
+    // Firebase-ben regisztrálva van és a telefonokon fut (felül-telepítés megy,
+    // Google-bejelentkezés működik). A jelszavak a debug kulcs fix értékei.
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("RELEASE_KEYSTORE")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (System.getenv("RELEASE_KEYSTORE") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
