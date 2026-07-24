@@ -61,6 +61,26 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release --build-name="$VNAME" --build-number="$VC"
 
+      # Őr: a release erőforrás-zsugorítója egyszer már kidobta a csak Dartból
+      # hivatkozott ic_notification drawable-t -> az APK induláskor elszállt
+      # (invalid_icon), miközben minden debug build jó volt. A keep.xml védi
+      # (android/app/src/main/res/raw/keep.xml), ez a lépés pedig garantálja,
+      # hogy ilyen APK többé NEM jelenhet meg release-ként. Ide vegyél fel
+      # minden újabb, csak futásidőben hivatkozott erőforrást.
+      - name: APK-őr — kötelező erőforrások és verzió
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          AAPT2=$(ls "$ANDROID_SDK_ROOT"/build-tools/*/aapt2 | sort -V | tail -1)
+          if ! "$AAPT2" dump resources "$APK" | grep -q "drawable/ic_notification"; then
+            echo "::error::ic_notification hiányzik a release APK-ból (erőforrás-zsugorító!) — lásd res/raw/keep.xml. Nem adunk ki törött release-t."
+            exit 1
+          fi
+          if ! "$AAPT2" dump badging "$APK" | grep -q "versionName='$VNAME'"; then
+            echo "::error::A release APK versionName-je nem '$VNAME'."
+            exit 1
+          fi
+          echo "APK-őr OK: ic_notification benne van, versionName=$VNAME."
+
       # Ellenőrzés a logban: melyik kulccsal írtunk alá. A helyi/Firebase kulcs
       # SHA-1-e: 0e:51:60:20:9c:e1:9b:38:2d:28:5b:f9:f2:7f:88:05:d8:87:8a:02
       - name: Aláíró kulcs a logba
