@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
 
 const _plansKey = 'workoutPlans';
@@ -97,15 +98,15 @@ class WorkoutPlansController extends Notifier<WorkoutPlans> {
   /// Az új terv egyből az aktív lesz — aki most vitte fel, arra kíváncsi.
   Future<void> add(WorkoutPlan plan) async {
     state = WorkoutPlans(plans: [...state.plans, plan], activeId: plan.id);
-    await prefs.setString(
+    await saveSetting(
       _plansKey,
       jsonEncode([for (final p in state.plans) p.toJson()]),
     );
-    await prefs.setString(_activeKey, plan.id);
+    await saveSetting(_activeKey, plan.id);
   }
 
   Future<void> setActive(String id) async {
     state = WorkoutPlans(plans: state.plans, activeId: id);
-    await prefs.setString(_activeKey, id);
+    await saveSetting(_activeKey, id);
   }
 }

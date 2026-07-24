@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
 
 const _categoriesKey = 'eventCategories';
@@ -132,13 +133,13 @@ class CategoryController extends Notifier<CategoryState> {
     await _saveAssignments();
   }
 
-  Future<void> _saveCategories() => prefs.setString(
+  Future<void> _saveCategories() => saveSetting(
     _categoriesKey,
     jsonEncode([for (final c in state.categories) c.toJson()]),
   );
 
   Future<void> _saveAssignments() =>
-      prefs.setString(_assignmentsKey, jsonEncode(state.assignments));
+      saveSetting(_assignmentsKey, jsonEncode(state.assignments));
 }
 
 /// Színes pötty egy kategóriához — a listákban és a naptárban is ez jelöl.

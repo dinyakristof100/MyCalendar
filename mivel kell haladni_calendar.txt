@@ -4,10 +4,10 @@ powershell -ExecutionPolicy Bypass -File .\release.ps1
 ---------------------------------------------------------------------------------
 
 
-KÉSZ (2026-07-23): naptárban az aktuális napnál megjelenik egy felirat ami azt írja hogy "bottom overflowed by 1.1 pixels". Ez ne jelenjen meg! Illetve a naptár hónapjait úgy is lehessen váltani, hogy oldalra húzom a naptárat. Ha jobbról balra húzom akkor a következő hónapot mutassa, ha balról jobbra húzom akkor az előző hónapot mutassa.
+El van csúszva anaptár amikor létre akarok hozni egy eseményt vagy a naptár oldalon belül egy eseményt. Ez azt jelenti hogy pl augusztus 1 most szombatra esik, de a naptárban (ahol eseményeket tudok létrehozni újként) mégis vasárnapra esik. Vizsgáld meg és javítsd ki ezt az elcsúszás problémát.
 
-KÉSZ (2026-07-23) — design-frissítés ráadásként:
-- Alsó navigációs sáv (Események / Naptár / Edzésnapló / Beállítások) a jobb felső hamburgermenü helyett; a fülek megőrzik az állapotukat, a vissza gomb a főképernyőre visz, nem lép ki azonnal.
-- Kijelentkezés és a fiók neve átkerült a Beállításokba.
-- Hónapváltáskor a naptárrács a húzás irányából csúszik be (animáció).
-- A naptár oldalon is van "+" gomb: a kijelölt napra nyit új eseményt (jövőbeli napnál reggel 9-re állítva).
+Létrehoztam az új eseményt de a naptár oldalon nem láttam mégsem, csak az események oldalon. A cél az hogy ha új eseményt hozok létre és azt sikeresen létre is hoztam, akkor azonnal lássam mind az események oldalon, mind a naptár oldalon.
+
+Értesítések: A közelgő eseményekről jelezzen előtte 24 órával, illetve az esemény előtt 1 órával is.
+
+Design: A meglévő világos, sötét, rendszer szerinti színpaletta mellé tegyünk be pár saját stílust új színekkel. Legyen csajosabb, pasisabb, letisztultabb, gyermekbarátabb stb. Fontos hogy a kiválasztott módot is adatbázisban tároljuk el.

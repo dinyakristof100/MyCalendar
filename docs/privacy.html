@@ -13,14 +13,16 @@
   <img src="icon.png" alt="MyCalendar ikon">
   <div>
     <h1>Adatkezelési tájékoztató</h1>
-    <p class="updated">MyCalendar · hatályos: 2026. július 22.</p>
+    <p class="updated">MyCalendar · hatályos: 2026. július 24.</p>
   </div>
 </header>
 
 <div class="callout">
-  <strong>Röviden:</strong> a MyCalendar mögött nincs saját szerver. A naptáradat
-  a telefonod és a Google között mozog, sehol máshol nem tárolódik. Nincs
-  analitika, nincs hirdetés, és semmilyen adatod nem kerül harmadik félhez.
+  <strong>Röviden:</strong> a naptáradat a telefonod és a Google között mozog. Az
+  appban létrehozott adataid (beállítások, kategóriák, edzéstervek) a
+  Google-fiókodhoz kötve a Google Firebase felhőjében mentődnek, hogy egy új
+  telefonon is visszaálljanak — 6 hónap inaktivitás után automatikusan törlődnek.
+  Nincs analitika, nincs hirdetés, és semmilyen adatod nem kerül harmadik félhez.
 </div>
 
 <h2>Ki kezeli az adatokat</h2>
@@ -51,6 +53,14 @@
     <td>Hogy az esemény előtti napon szóljon a telefon</td>
     <td>A készüléked helyi értesítés-ütemezőjében</td>
   </tr>
+  <tr>
+    <td>Az appban létrehozott adataid (téma-beállítás, naptárkategóriák és
+        színeik, edzéstervek, heti teljesítések)</td>
+    <td>Hogy a beállításaid és terveid új eszközön is visszaálljanak, ha
+        bejelentkezel</td>
+    <td>A készülékeden ÉS a Google-fiókodhoz kötve a Cloud Firestore-ban
+        (Google LLC)</td>
+  </tr>
 </table>
 
 <h2>Amit az app NEM csinál</h2>
@@ -58,7 +68,9 @@
   <li>Nem gyűjt analitikát, nem követi a használatot.</li>
   <li>Nem jelenít meg hirdetést.</li>
   <li>Nem ad el, nem ad át és nem oszt meg adatot harmadik féllel.</li>
-  <li>Nem tárolja a naptáradat semmilyen szerveren.</li>
+  <li>Nem tárolja a naptáresemények tartalmát semmilyen szerveren — csak az
+      appban létrehozott saját adataid (beállítások, kategóriák, edzéstervek)
+      mentődnek a fiókodhoz kötve.</li>
   <li>Nem fér hozzá a névjegyeidhez, üzeneteidhez, helyzetedhez, kamerádhoz
       vagy a fájljaidhoz.</li>
 </ul>
@@ -86,8 +98,12 @@
 <h2>Meddig őrizzük az adatokat</h2>
 <p>
   A naptáresemények csak addig léteznek, amíg az app fut — bezárás után
-  eltűnnek a memóriából. A Firebase Authenticationben tárolt fiókazonosító
-  addig marad meg, amíg nem kéred a törlését.
+  eltűnnek a memóriából. Az appban létrehozott adataid (beállítások, kategóriák,
+  edzéstervek) a Cloud Firestore-ban a fiókodhoz kötve maradnak, és
+  <strong>6 hónap inaktivitás után automatikusan, véglegesen törlődnek</strong> —
+  a hozzájuk tartozó Firebase-fiókoddal (azonosító és a fenti alapadatok) együtt.
+  Minden appindítás nullázza ezt a visszaszámlálót. Ha korábban szeretnéd
+  töröltetni a fiókodat, írj a fenti e-mail címre.
 </p>
 
 <h2>Hogyan szüntetheted meg a hozzáférést</h2>

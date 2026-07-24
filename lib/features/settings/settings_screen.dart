@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_scaffold.dart';
+import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
 import '../auth/auth_controller.dart';
 
@@ -21,7 +22,7 @@ class ThemeModeController extends Notifier<ThemeMode> {
 
   Future<void> set(ThemeMode mode) async {
     state = mode;
-    await prefs.setString(_key, mode.name);
+    await saveSetting(_key, mode.name);
   }
 }
 
@@ -93,8 +94,10 @@ class SettingsScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
             child: Text(
-              'A naptáradat a készülékről olvassuk, az edzésterveid a '
-              'telefonon maradnak. Semmi nem kerül szerverre.',
+              'A naptáradat a készülékről olvassuk. A beállításaid, '
+              'kategóriáid és edzésterveid a Google-fiókodhoz kötve a felhőbe '
+              'is mentődnek, hogy új telefonon visszaálljanak. Ha fél évig nem '
+              'használod az appot, ezek automatikusan törlődnek.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 height: 1.4,

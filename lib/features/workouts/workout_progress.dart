@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
 import 'workout_plans.dart';
 
@@ -66,6 +67,6 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
     );
     // Az értesítések újraütemezését a workoutNudgeSyncProvider intézi: ez az
     // állapot az ő függősége.
-    await prefs.setString(_key, jsonEncode(state.toJson()));
+    await saveSetting(_key, jsonEncode(state.toJson()));
   }
 }

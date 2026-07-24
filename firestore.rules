@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Minden felhasználó KIZÁRÓLAG a saját dokumentumát olvashatja/írhatja.
+// A 6 hónap inaktivitás utáni törlést a Firestore TTL-szabálya végzi a `ttl`
+// mező alapján (gcloud/konzol, egyszeri beállítás) — nem kód, nem Cloud Function.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

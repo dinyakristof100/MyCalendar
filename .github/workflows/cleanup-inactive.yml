@@ -1,0 +1,27 @@
+name: Inaktiv fiokok takaritasa
+
+# 6 honap inaktivitas utan torli a felhasznalo adatait ES a Firebase Auth
+# fiokjat. A futtato a felhasznalo tavolleteben is fut (ezt Cloud Function /
+# Firestore TTL adna, de azok Blaze-t kernek — ez a Spark-kompatibilis, ingyenes
+# ut). A tenyleges logika: tools/cleanup_inactive.mjs.
+on:
+  schedule:
+    - cron: '0 4 * * 1'     # minden hetfo 04:00 UTC
+  workflow_dispatch:          # kezi inditas az Actions fulrol (teszteleshez)
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Nincs package.json — egyetlen fuggoseg, ad-hoc telepitve, majorra pinnelve.
+      - run: npm i firebase-admin@^13
+
+      - run: node tools/cleanup_inactive.mjs
+        env:
+          FIREBASE_SA_B64: ${{ secrets.FIREBASE_SA_B64 }}

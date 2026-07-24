@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'app.dart';
+import 'core/cloud_sync.dart';
 import 'core/notifications.dart';
 import 'core/prefs.dart';
 import 'features/workouts/workout_nudges.dart';
@@ -33,6 +34,9 @@ Future<void> main() async {
     // Egyszeri beolvasás: innentől a terv és a pipák változását követve
     // újraütemezi az esti kérdéseket.
     container.read(workoutNudgeSyncProvider);
+    // Ugyanígy egyszer: bejelentkezéskor visszatölti a felhőből a mentett
+    // adatokat (kategóriák, edzéstervek, beállítások), és frissen tartja a TTL-t.
+    container.read(cloudSyncProvider);
 
     runApp(
       UncontrolledProviderScope(
