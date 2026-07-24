@@ -96,8 +96,8 @@ class SettingsScreen extends ConsumerWidget {
             child: Text(
               'A naptáradat a készülékről olvassuk. A beállításaid, '
               'kategóriáid és edzésterveid a Google-fiókodhoz kötve a felhőbe '
-              'is mentődnek, hogy új telefonon visszaálljanak. Ha fél évig nem '
-              'használod az appot, ezek automatikusan törlődnek.',
+              'is mentődnek, hogy új telefonon visszaálljanak. Adataid törlését '
+              'a fejlesztőnél kérheted.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 height: 1.4,

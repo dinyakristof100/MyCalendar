@@ -24,16 +24,11 @@ const syncedKeys = <String>[
   'workoutProgress', // a hét teljesített napjai
 ];
 
-/// 6 hónap inaktivitás után a Firestore TTL-je törli a user-dokumentumot (a hozzá
-/// tartozó minden adattal együtt). A `ttl` mezőt minden felhőírás előretolja, így
-/// aktív használat mellett sosem jár le.
+/// A `lastActiveAt` minden felhőírásnál a szerveridőre frissül. Automatikus
+/// takarítást nem futtatunk — az inaktív fiókok törlését a fejlesztő kézzel
+/// intézi a Firebase konzolon; ez a mező ehhez ad támpontot (ki mikor volt
+/// utoljára aktív).
 ///
-/// A TTL-szabályt egyszer kell beállítani a `users` gyűjtemény `ttl` mezőjére
-/// (Firestore konzol vagy `gcloud firestore fields ttls update`). A felhasználó
-/// Firebase Auth *fiókja* ettől nem törlődik — ahhoz Admin SDK / ütemezett
-/// Cloud Function kellene, ami Blaze-csomagot igényel; a projekt Spark-on van.
-const _inactivityWindow = Duration(days: 183); // ~6 hónap
-
 /// Van-e hova szinkronizálni: fut a Firebase (tesztben nem) és van bejelentkezett
 /// felhasználó. Enélkül minden felhőművelet csendes noop — a helyi tár marad.
 bool get _cloudReady =>
@@ -56,7 +51,7 @@ Future<void> saveSetting(String key, String value) async {
   _pushToCloud({key: value});
 }
 
-/// A közös felhőírás: a megadott mezők + a frissített aktivitás/TTL bélyeg,
+/// A közös felhőírás: a megadott mezők + a friss `lastActiveAt` bélyeg,
 /// merge-dzsel (a többi mezőt nem bántja).
 void _pushToCloud(Map<String, Object?> fields) {
   final doc = _cloudReady ? _userDoc() : null;
@@ -65,13 +60,12 @@ void _pushToCloud(Map<String, Object?> fields) {
     doc.set({
       ...fields,
       'lastActiveAt': FieldValue.serverTimestamp(),
-      'ttl': Timestamp.fromDate(DateTime.now().add(_inactivityWindow)),
     }, SetOptions(merge: true)).catchError((_) {}),
   );
 }
 
-/// Csak az aktivitás/TTL bélyeget tolja előre — így az aktív felhasználó adata
-/// nem évül el. Minden bejelentkezéskor (app indulás) hívjuk.
+/// Csak a `lastActiveAt` bélyeget frissíti — hogy a kézi takarításnál pontos
+/// legyen az „utoljára aktív" időpont. Minden bejelentkezéskor (app indulás) hívjuk.
 void touchActivity() => _pushToCloud(const {});
 
 /// Bejelentkezéskor összefésüli a felhőt a helyi tárral:
