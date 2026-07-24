@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.READ_CALENDAR"/>
     <!-- Az appból létrehozott esemény beírása ugyanabba a naptárba. -->
     <uses-permission android:name="android.permission.WRITE_CALENDAR"/>
+    <!-- Az appon belüli frissítés: a letöltött release APK telepítőjének
+         elindítása (ota_update). A rendszer így is külön megerősítést kér. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="MyCalendar"
         android:name="${applicationName}"

@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.CalendarContract
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -42,6 +43,7 @@ class MainActivity : FlutterActivity() {
                     "upcomingEvents" -> handleUpcomingEvents(call.argument<Int>("days") ?: 14, result)
                     "eventsInRange" -> handleEventsInRange(call, result)
                     "createEvent" -> handleCreateEvent(call, result)
+                    "versionCode" -> result.success(currentVersionCode())
                     else -> result.notImplemented()
                 }
             }
@@ -159,6 +161,14 @@ class MainActivity : FlutterActivity() {
             if (cursor.moveToFirst()) return cursor.getLong(0)
         }
         return null
+    }
+
+    /** A telepített APK versionCode-ja — a Dart oldal ezt hasonlítja a GitHub
+     * legfrissebb kiadásához, hogy van-e mit frissíteni. */
+    private fun currentVersionCode(): Long {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode
+        else @Suppress("DEPRECATION") info.versionCode.toLong()
     }
 
     private fun has(permission: String): Boolean =

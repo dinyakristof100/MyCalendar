@@ -43,6 +43,10 @@ dependencies:
   flutter_local_notifications: ^22.1.0
   timezone: ^0.11.1
   shared_preferences: ^2.5.5
+  # Sideload OTA-frissítés: letölti a legfrissebb release APK-t és elindítja a
+  # rendszer telepítőjét (a Play Store nem szolgálja ki ezt az appot). Csak
+  # Android — iOS-en az önfrissítés tiltott.
+  ota_update: ^7.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

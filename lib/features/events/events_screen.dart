@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_scaffold.dart';
+import '../../core/app_update.dart';
 import '../../core/ui.dart';
 import '../auth/auth_controller.dart';
 import '../calendar/calendar_service.dart';
@@ -33,6 +34,11 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
     _lifecycle = AppLifecycleListener(
       onResume: () => ref.invalidate(upcomingEventsProvider),
     );
+    // Hidegindításkor egyszer (a fül életben marad az IndexedStackben): van-e
+    // újabb kiadás a GitHubon? Ha igen, az első képkocka után felajánljuk.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) maybePromptUpdate(context);
+    });
   }
 
   @override
