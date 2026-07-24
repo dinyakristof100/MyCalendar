@@ -168,10 +168,24 @@ Future<void> showCategoryPicker(BuildContext context, String eventId) {
   );
 }
 
+/// Önálló kategória-kezelő: nincs eseményhez kötve, csak létrehozás és törlés —
+/// így nem kell előbb egy eseményt megnyitni ahhoz, hogy kategóriát lehessen
+/// csinálni. A naptár fejlécéből nyílik.
+Future<void> showCategoryManager(BuildContext context) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    builder: (_) => const _CategoryPicker(eventId: null),
+  );
+}
+
 class _CategoryPicker extends ConsumerWidget {
   const _CategoryPicker({required this.eventId});
 
-  final String eventId;
+  /// `null` esetén önálló kezelő mód: nincs „Nincs kategória" sor és nincs
+  /// hozzárendelés, csak a kategóriák listája + létrehozás/törlés.
+  final String? eventId;
 
   Future<void> _confirmDelete(
     BuildContext context,
@@ -207,40 +221,64 @@ class _CategoryPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final state = ref.watch(categoriesProvider);
-    final current = state.of(eventId);
+    final id = eventId;
+    final managing = id == null;
+    final current = managing ? null : state.of(id);
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(24, 4, 24, 24),
+        padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Kategória',
+              managing ? 'Naptárkategóriák' : 'Kategória',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 12),
-            // "Nincs" — a hozzárendelés törlése.
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                Icons.block,
-                color: theme.colorScheme.onSurfaceVariant,
+            if (managing) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Hozz létre kategóriákat névvel és színnel. Egy eseményt '
+                'megnyitva rendelheted hozzá valamelyiket; a szín a naptárban '
+                'és az eseménylistában is megjelenik.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.4,
+                ),
               ),
-              title: const Text('Nincs kategória'),
-              trailing: current == null
-                  ? Icon(Icons.check, color: theme.colorScheme.primary)
-                  : null,
-              onTap: () async {
-                await ref
-                    .read(categoriesProvider.notifier)
-                    .assign(eventId, null);
-                if (context.mounted) Navigator.pop(context);
-              },
-            ),
+            ],
+            const SizedBox(height: 12),
+            // "Nincs" — a hozzárendelés törlése (csak eseménynél).
+            if (!managing)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  Icons.block,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                title: const Text('Nincs kategória'),
+                trailing: current == null
+                    ? Icon(Icons.check, color: theme.colorScheme.primary)
+                    : null,
+                onTap: () async {
+                  await ref.read(categoriesProvider.notifier).assign(id, null);
+                  if (context.mounted) Navigator.pop(context);
+                },
+              ),
+            if (managing && state.categories.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  'Még nincs egyetlen kategóriád sem. Hozd létre az elsőt lent.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             for (final category in state.categories)
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -249,7 +287,7 @@ class _CategoryPicker extends ConsumerWidget {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (category.id == current?.id)
+                    if (!managing && category.id == current?.id)
                       Icon(Icons.check, color: theme.colorScheme.primary),
                     IconButton(
                       icon: const Icon(Icons.delete_outline),
@@ -259,12 +297,14 @@ class _CategoryPicker extends ConsumerWidget {
                     ),
                   ],
                 ),
-                onTap: () async {
-                  await ref
-                      .read(categoriesProvider.notifier)
-                      .assign(eventId, category.id);
-                  if (context.mounted) Navigator.pop(context);
-                },
+                onTap: managing
+                    ? null
+                    : () async {
+                        await ref
+                            .read(categoriesProvider.notifier)
+                            .assign(id, category.id);
+                        if (context.mounted) Navigator.pop(context);
+                      },
               ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -275,12 +315,12 @@ class _CategoryPicker extends ConsumerWidget {
               ),
               onPressed: () async {
                 final created = await _showCreateDialog(context, ref);
-                // Az újat egyből rá is tesszük az eseményre — aki most hozta
-                // létre, arra akarja tenni.
-                if (created != null) {
+                // Eseménynél az újat egyből rátesszük (aki most hozta létre, arra
+                // akarja); kezelő módban csak létrejön, a lap nyitva marad.
+                if (created != null && !managing) {
                   await ref
                       .read(categoriesProvider.notifier)
-                      .assign(eventId, created.id);
+                      .assign(id, created.id);
                   if (context.mounted) Navigator.pop(context);
                 }
               },

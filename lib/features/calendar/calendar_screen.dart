@@ -111,6 +111,13 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
 
     return AppScaffold(
       title: 'Naptár',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.label_outline),
+          tooltip: 'Kategóriák',
+          onPressed: () => showCategoryManager(context),
+        ),
+      ],
       floatingActionButton: FloatingActionButton(
         tooltip: 'Új esemény',
         onPressed: () async {

@@ -93,6 +93,25 @@ void main() {
     expect(find.widgetWithText(AppBar, 'Események'), findsOneWidget);
   });
 
+  testWidgets('a naptár fejlécéből elérhető és megnyílik a kategória-kezelő', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Naptár');
+
+    // A kategóriák önálló belépési pontja a fejlécben van — nem kell hozzá
+    // előbb eseményt megnyitni.
+    final action = find.byTooltip('Kategóriák');
+    expect(action, findsOneWidget);
+
+    await tester.tap(action);
+    await tester.pumpAndSettle();
+    // A kezelő lap (esemény nélkül) létrehozással.
+    expect(find.text('Naptárkategóriák'), findsOneWidget);
+    expect(find.text('Új kategória'), findsOneWidget);
+  });
+
   testWidgets('oldalra húzva vált a naptár hónapja', (tester) async {
     await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
     await tester.pumpAndSettle();
