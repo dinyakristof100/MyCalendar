@@ -83,24 +83,23 @@ void main() {
       ['mell', 'hát'],
     ]);
     final now = DateTime(2026, 7, 22);
-    final progress = WeekProgress(
+    final stored = WeekProgress(
       planId: 'a',
       weekStart: weekStartOf(now),
       done: const {0},
     );
 
-    expect(progress.doneFor(plan, now), {0});
-    expect(progress.weekDoneFor(plan, now), isFalse);
-    // Következő hét: tiszta lap.
-    expect(progress.doneFor(plan, now.add(const Duration(days: 7))), isEmpty);
-    // Másik terv pipái sem számítanak.
+    // Ugyanaz a hét, ugyanaz a terv: megmarad.
+    expect(settleWeek(stored, plan, false, now).done, {0});
+    // Következő hét, átcsúsztatás nélkül: tiszta lap.
+    final next = now.add(const Duration(days: 7));
+    expect(settleWeek(stored, plan, false, next).done, isEmpty);
+    expect(settleWeek(stored, plan, false, next).carried, isEmpty);
+    // Másik terv nem örökli az előző pipáit.
     expect(
-      progress.doneFor(
-        _plan('b', [
-          ['láb'],
-        ]),
-        now,
-      ),
+      settleWeek(stored, _plan('b', [
+        ['láb'],
+      ]), false, now).done,
       isEmpty,
     );
   });
@@ -110,14 +109,20 @@ void main() {
       ['mell', 'hát'],
     ]);
     final now = DateTime(2026, 7, 22);
-    final progress = WeekProgress(
+    final full = WeekProgress(
       planId: 'a',
       weekStart: weekStartOf(now),
       done: const {0, 1},
     );
+    expect(full.fullyTrained(plan), isTrue);
+    expect(full.resolvedAll(plan), isTrue);
 
-    expect(progress.weekDoneFor(plan, now), isTrue);
-    expect(const WeekProgress().weekDoneFor(plan, now), isFalse);
-    expect(progress.weekDoneFor(null, now), isFalse);
+    final partial = WeekProgress(
+      planId: 'a',
+      weekStart: weekStartOf(now),
+      done: const {0},
+    );
+    expect(partial.fullyTrained(plan), isFalse);
+    expect(partial.resolvedAll(plan), isFalse);
   });
 }

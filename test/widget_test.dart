@@ -210,15 +210,12 @@ void main() {
     // Koppintásra nem történik semmi — csak hosszú nyomásra kérdez.
     await tester.tap(find.text('mell, tricepsz'));
     await tester.pumpAndSettle();
-    expect(find.text('Biztosan ezt az edzést teljesítetted ma?'), findsNothing);
+    expect(find.text('Mi lett ezzel a nappal?'), findsNothing);
 
     // Mégsem: marad pipa nélkül.
     await tester.longPress(find.text('mell, tricepsz'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Biztosan ezt az edzést teljesítetted ma?'),
-      findsOneWidget,
-    );
+    expect(find.text('Mi lett ezzel a nappal?'), findsOneWidget);
     await tester.tap(find.text('Mégsem'));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.check_circle), findsNothing);
@@ -226,7 +223,7 @@ void main() {
     // Megerősítve viszont kipipálódik, és dicséret jár érte.
     await tester.longPress(find.text('mell, tricepsz'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Igen, megvolt'));
+    await tester.tap(find.text('Megvolt'));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.check_circle), findsOneWidget);
     expect(
@@ -245,7 +242,7 @@ void main() {
     // A kipipált nap nem nyitja meg újra a kérdést.
     await tester.longPress(find.text('mell, tricepsz'));
     await tester.pumpAndSettle();
-    expect(find.text('Biztosan ezt az edzést teljesítetted ma?'), findsNothing);
+    expect(find.text('Mi lett ezzel a nappal?'), findsNothing);
   });
 
   testWidgets('töltés közben nem dob a loginra', (tester) async {

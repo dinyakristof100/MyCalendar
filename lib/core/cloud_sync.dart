@@ -22,6 +22,7 @@ const syncedKeys = <String>[
   'workoutPlans', // edzéstervek
   'activeWorkoutPlan', // az aktív terv
   'workoutProgress', // a hét teljesített napjai
+  'carryOverWorkouts', // le nem edzett napok átcsúsztatása
 ];
 
 /// A `lastActiveAt` minden felhőírásnál a szerveridőre frissül. Automatikus
@@ -108,6 +109,7 @@ final cloudSyncProvider = Provider<void>((ref) {
         ref.invalidate(categoriesProvider);
         ref.invalidate(workoutPlansProvider);
         ref.invalidate(workoutProgressProvider);
+        ref.invalidate(carryOverProvider);
       }),
     );
   }, fireImmediately: true);

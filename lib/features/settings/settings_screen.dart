@@ -5,6 +5,7 @@ import '../../core/app_scaffold.dart';
 import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
 import '../auth/auth_controller.dart';
+import '../workouts/workout_progress.dart';
 
 const _key = 'themeMode';
 
@@ -168,6 +169,19 @@ class SettingsScreen extends ConsumerWidget {
                   ),
               ],
             ),
+          ),
+          const Divider(height: 24),
+          const _SectionTitle('Edzés'),
+          SwitchListTile(
+            secondary: const Icon(Icons.event_repeat),
+            title: const Text('Le nem edzett napok átcsúsztatása'),
+            subtitle: const Text(
+              'A hét végén nyitva maradt napokat áthozza a következő hétre. '
+              'Egy napot a naplóban hosszan nyomva „Kihagyom"-mal zárhatsz le, '
+              'ezt nem hozzuk át.',
+            ),
+            value: ref.watch(carryOverProvider),
+            onChanged: (on) => ref.read(carryOverProvider.notifier).set(on),
           ),
           const Divider(height: 24),
           Padding(

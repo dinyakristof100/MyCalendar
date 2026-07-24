@@ -105,53 +105,66 @@ class _PlanView extends ConsumerWidget {
   final List<WorkoutPlan> plans;
   final WorkoutPlan plan;
 
-  /// Megerősítés után pipa. Hosszú nyomásra indul, nem koppintásra: görgetés
-  /// közben könnyű véletlenül eltalálni egy kártyát. A kérdés a nap tartalmát
-  /// is kimondja, mert egy téves pipa a heti tervből venne el egy edzést.
-  Future<void> _confirm(
+  /// Hosszú nyomásra kérdez: görgetés közben könnyű véletlenül eltalálni egy
+  /// kártyát, ezért egy edzés lezárása mindig megerősítést kér. Három kimenet:
+  /// megvolt, szándékosan kihagyva (nem húzzuk át), vagy mégsem.
+  Future<WorkoutOutcome?> _ask(
     BuildContext context,
-    WidgetRef ref,
-    int day,
+    String label,
     String content,
-  ) async {
-    final yes = await showDialog<bool>(
+  ) {
+    return showDialog<WorkoutOutcome>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Biztosan ezt az edzést teljesítetted ma?'),
-        content: Text('${day + 1}. nap — $content'),
+        title: const Text('Mi lett ezzel a nappal?'),
+        content: Text('$label — $content'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Mégsem'),
           ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, WorkoutOutcome.skipped),
+            child: const Text('Kihagyom'),
+          ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Igen, megvolt'),
+            onPressed: () => Navigator.pop(context, WorkoutOutcome.done),
+            child: const Text('Megvolt'),
           ),
         ],
       ),
     );
-    if (yes ?? false) {
-      await ref.read(workoutProgressProvider.notifier).markDone(plan, day);
-      if (!context.mounted) return;
-      // Motiváció a pipa mellé — a hét utolsó edzése külön ünneplést kap.
-      final now = DateTime.now();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          content: Text(
-            praiseFor(
-              done: ref.read(workoutProgressProvider).doneFor(plan, now).length,
-              total: plan.daysOfWeekAt(now).length,
-              day: now,
-            ),
-          ),
-        ),
-      );
-    }
+  }
+
+  /// Megkérdi a kimenetet, elmenti, majd visszajelez: leedzésre motiváció (a hét
+  /// utolsó edzése külön ünneplést kap), kihagyásra rövid nyugtázás.
+  Future<void> _mark(
+    BuildContext context,
+    WidgetRef ref,
+    String label,
+    String content,
+    Future<void> Function(WorkoutOutcome) apply,
+  ) async {
+    final outcome = await _ask(context, label, content);
+    if (outcome == null) return;
+    await apply(outcome);
+    if (!context.mounted) return;
+
+    final week = ref.read(currentWeekProvider);
+    final message = outcome == WorkoutOutcome.done
+        ? praiseFor(
+            done: week.trainedCount(plan),
+            total: week.targetCount(plan),
+            day: DateTime.now(),
+          )
+        : 'Kihagyva — ezt a napot nem hozzuk át a jövő hétre.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        content: Text(message),
+      ),
+    );
   }
 
   @override
@@ -159,8 +172,10 @@ class _PlanView extends ConsumerWidget {
     final theme = Theme.of(context);
     final now = DateTime.now();
     final thisWeek = weekIndexOf(now, weeks: plan.weeks.length);
-    final done = ref.watch(workoutProgressProvider).doneFor(plan, now);
-    final days = plan.daysOfWeekAt(now).length;
+    final week = ref.watch(currentWeekProvider);
+    final target = week.targetCount(plan);
+    final trained = week.trainedCount(plan);
+    final skipped = week.skippedCount(plan);
     var slot = 0;
 
     return ListView(
@@ -195,9 +210,10 @@ class _PlanView extends ConsumerWidget {
         const SizedBox(height: 4),
         Text(
           '${plan.hasBWeek ? 'A és B hét' : 'Sima heti terv'} · ezen a héten '
-          '${done.length}/$days megvan',
+          '$trained/$target megvan'
+          '${skipped > 0 ? ' · $skipped kihagyva' : ''}',
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: done.length >= days
+            color: trained >= target
                 ? _done
                 : theme.colorScheme.onSurfaceVariant,
           ),
@@ -205,27 +221,67 @@ class _PlanView extends ConsumerWidget {
         const SizedBox(height: 14),
         Appear(
           index: slot++,
-          child: _MotivationCard(weekDone: done.length >= days),
+          child: _MotivationCard(
+            fullyTrained: week.fullyTrained(plan),
+            resolved: week.resolvedAll(plan),
+            skipped: skipped,
+          ),
         ),
-        for (var week = 0; week < plan.weeks.length; week++) ...[
+        for (var w = 0; w < plan.weeks.length; w++) ...[
           if (plan.hasBWeek)
             _WeekHeader(
-              label: '${week == 0 ? 'A' : 'B'} HÉT',
-              isThisWeek: week == thisWeek,
+              label: '${w == 0 ? 'A' : 'B'} HÉT',
+              isThisWeek: w == thisWeek,
             )
           else
             const SizedBox(height: 14),
-          for (var day = 0; day < plan.weeks[week].length; day++)
+          for (var day = 0; day < plan.weeks[w].length; day++)
             Appear(
               index: slot++,
               child: _DayCard(
-                day: day + 1,
-                content: plan.weeks[week][day],
-                done: week == thisWeek && done.contains(day),
-                // Csak az aktuális hét pipálható, és csak ami még nincs kész.
-                onLongPress: week == thisWeek && !done.contains(day)
-                    ? () => _confirm(context, ref, day, plan.weeks[week][day])
+                label: '${day + 1}. NAP',
+                content: plan.weeks[w][day],
+                done: w == thisWeek && week.done.contains(day),
+                skipped: w == thisWeek && week.skipped.contains(day),
+                // Csak az aktuális hét pipálható, és csak ami még nyitott.
+                onLongPress:
+                    w == thisWeek &&
+                        !week.done.contains(day) &&
+                        !week.skipped.contains(day)
+                    ? () => _mark(
+                        context,
+                        ref,
+                        '${day + 1}. nap',
+                        plan.weeks[w][day],
+                        (outcome) => ref
+                            .read(workoutProgressProvider.notifier)
+                            .markBase(plan, day, outcome),
+                      )
                     : null,
+              ),
+            ),
+        ],
+        if (week.carried.isNotEmpty) ...[
+          const _CarriedHeader(),
+          for (var i = 0; i < week.carried.length; i++)
+            Appear(
+              index: slot++,
+              child: _DayCard(
+                label: 'ÁTHOZOTT',
+                content: week.carried[i].content,
+                done: week.carried[i].done,
+                skipped: week.carried[i].resolved && !week.carried[i].done,
+                onLongPress: week.carried[i].resolved
+                    ? null
+                    : () => _mark(
+                        context,
+                        ref,
+                        'Áthozott nap',
+                        week.carried[i].content,
+                        (outcome) => ref
+                            .read(workoutProgressProvider.notifier)
+                            .markCarried(plan, i, outcome),
+                      ),
               ),
             ),
         ],
@@ -234,42 +290,39 @@ class _PlanView extends ConsumerWidget {
   }
 }
 
-/// A „lite" gondolkodtató: amíg a hét nincs meg, naponta forgó párosban
-/// mutatja, mit nyersz az edzéssel és mit veszítesz a kihagyással. Kész hétnél
-/// zöld gratuláció — a kártya ilyenkor sem tűnik el, hogy a hely ne ugráljon.
+/// A „lite" gondolkodtató, illetve a hét zárása. Amíg van nyitott nap, naponta
+/// forgó párosban mutatja, mit nyersz és mit veszítesz. Ha minden edzés megvan,
+/// zöld gratuláció; ha a hét lezárt, de volt kihagyott nap, halkabb nyugtázás.
 class _MotivationCard extends StatelessWidget {
-  const _MotivationCard({required this.weekDone});
+  const _MotivationCard({
+    required this.fullyTrained,
+    required this.resolved,
+    required this.skipped,
+  });
 
-  final bool weekDone;
+  final bool fullyTrained;
+  final bool resolved;
+  final int skipped;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    if (weekDone) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
-        decoration: BoxDecoration(
-          color: _done.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: _done.withValues(alpha: 0.55)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.emoji_events_outlined, color: _done),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'A heti terv kész — minden edzés megvan. Jöhet a pihenés!',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: _done,
-                  fontWeight: FontWeight.w600,
-                  height: 1.35,
-                ),
-              ),
-            ),
-          ],
-        ),
+    if (fullyTrained) {
+      return _Banner(
+        color: _done,
+        icon: Icons.emoji_events_outlined,
+        text: 'A heti terv kész — minden edzés megvan. Jöhet a pihenés!',
+      );
+    }
+
+    if (resolved) {
+      return _Banner(
+        color: theme.colorScheme.onSurfaceVariant,
+        icon: Icons.check_circle_outline,
+        text:
+            'A hét lezárva — $skipped nap kihagyva, a többi megvolt. '
+            'A kihagyott napot nem hozzuk át.',
       );
     }
 
@@ -299,6 +352,45 @@ class _MotivationCard extends StatelessWidget {
             icon: Icons.trending_down,
             color: theme.colorScheme.error,
             text: reflection.cost,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A hét összegző sávja (kész / lezárva) — a helye ilyenkor sem tűnik el, hogy
+/// a lista ne ugráljon.
+class _Banner extends StatelessWidget {
+  const _Banner({required this.color, required this.icon, required this.text});
+
+  final Color color;
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: color.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+              ),
+            ),
           ),
         ],
       ),
@@ -373,22 +465,57 @@ class _WeekHeader extends StatelessWidget {
   }
 }
 
+/// Az áthozott napok szekció fejléce — a múlt hétről itt gyűlnek össze a
+/// nyitva maradt edzések.
+class _CarriedHeader extends StatelessWidget {
+  const _CarriedHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 26, 0, 6),
+      child: Row(
+        children: [
+          Icon(
+            Icons.history,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'ÁTHOZVA A MÚLT HÉTRŐL',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DayCard extends StatelessWidget {
   const _DayCard({
-    required this.day,
+    required this.label,
     required this.content,
     required this.done,
+    required this.skipped,
     required this.onLongPress,
   });
 
-  final int day;
+  final String label;
   final String content;
   final bool done;
+  final bool skipped;
   final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Ink(
@@ -397,6 +524,12 @@ class _DayCard extends StatelessWidget {
                 color: _done.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(color: _done.withValues(alpha: 0.55)),
+              )
+            : skipped
+            ? BoxDecoration(
+                color: muted.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: muted.withValues(alpha: 0.35)),
               )
             : cardSurface(theme),
         child: InkWell(
@@ -411,9 +544,13 @@ class _DayCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '$day. NAP',
+                        skipped ? '$label · KIHAGYVA' : label,
                         style: theme.textTheme.labelMedium?.copyWith(
-                          color: done ? _done : theme.colorScheme.primary,
+                          color: done
+                              ? _done
+                              : skipped
+                              ? muted
+                              : theme.colorScheme.primary,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.2,
                         ),
@@ -423,6 +560,10 @@ class _DayCard extends StatelessWidget {
                         content,
                         style: theme.textTheme.titleMedium?.copyWith(
                           height: 1.25,
+                          color: skipped ? muted : null,
+                          decoration: skipped
+                              ? TextDecoration.lineThrough
+                              : null,
                         ),
                       ),
                     ],
@@ -431,6 +572,9 @@ class _DayCard extends StatelessWidget {
                 if (done) ...[
                   const SizedBox(width: 12),
                   const Icon(Icons.check_circle, color: _done),
+                ] else if (skipped) ...[
+                  const SizedBox(width: 12),
+                  Icon(Icons.do_not_disturb_on_outlined, color: muted),
                 ],
               ],
             ),

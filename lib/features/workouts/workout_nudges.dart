@@ -12,9 +12,12 @@ import 'workout_progress.dart';
 /// Az esti kérdések a tervet és a pipákat követik: elég egyszer beolvasni
 /// (a `main` megteszi), utána minden változásnál magától újraütemez.
 final workoutNudgeSyncProvider = Provider<void>((ref) {
+  final plan = ref.watch(workoutPlansProvider).active;
   syncWorkoutNudges(
-    plan: ref.watch(workoutPlansProvider).active,
-    progress: ref.watch(workoutProgressProvider),
+    plan: plan,
+    // A hét „lezárva", ha minden nap leedzve VAGY szándékosan kihagyva — a
+    // skippelt napra nincs mit kérdezni, az áthozottra viszont van.
+    weekResolved: plan != null && ref.watch(currentWeekProvider).resolvedAll(plan),
   );
 });
 
@@ -45,12 +48,12 @@ const _details = NotificationDetails(
 
 /// Beütemezi az esti kérdést a következő [_horizonDays] napra.
 ///
-/// Csak akkor kérdez, ha van aktív terv, és a hét még nincs kipipálva: a
-/// letudott hét hátralévő napjait kihagyjuk, a következő hetet viszont már
-/// ütemezzük.
+/// Csak akkor kérdez, ha van aktív terv, és a hét még nincs lezárva: a letudott
+/// (leedzett vagy kihagyott) hét hátralévő napjait kihagyjuk, a következő hetet
+/// viszont már ütemezzük.
 Future<void> syncWorkoutNudges({
   required WorkoutPlan? plan,
-  required WeekProgress progress,
+  required bool weekResolved,
   DateTime? now,
 }) async {
   final from = now ?? DateTime.now();
@@ -61,7 +64,7 @@ Future<void> syncWorkoutNudges({
   }
   if (plan == null) return;
 
-  final weekDone = progress.weekDoneFor(plan, from);
+  final weekDone = weekResolved;
   final nextWeek = weekStartOf(from).add(const Duration(days: 7));
   final random = Random();
 
