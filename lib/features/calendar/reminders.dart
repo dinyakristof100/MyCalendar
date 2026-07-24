@@ -15,7 +15,7 @@ const _details = NotificationDetails(
   android: AndroidNotificationDetails(
     'event_reminders',
     'Naptár emlékeztetők',
-    channelDescription: 'Emlékeztető a naptáresemény előtt egy nappal.',
+    channelDescription: 'Emlékeztető a naptáresemény előtt egy nappal és egy órával.',
     importance: Importance.high,
     priority: Priority.high,
     // Enélkül a „csak prioritásos” Ne zavarjanak mód elnyeli az értesítést, és
@@ -25,16 +25,41 @@ const _details = NotificationDetails(
   iOS: DarwinNotificationDetails(),
 );
 
-/// Az emlékeztető időpontja: pontosan egy nappal a kezdés előtt, egész napos
-/// eseménynél az előző nap [_allDayReminderHour] órakor.
+/// Egy esemény emlékeztetői: 24 órával előtte, és időpontos eseménynél egy
+/// órával előtte is. A `slot` az azonosító-eltolás (0/1), hogy a két értesítés
+/// ne írja felül egymást.
 ///
-/// Fali óra szerint számol (nap − 1), nem 24 óra kivonásával — így a nyári
-/// időszámítás váltásának hetében sem csúszik el egy órát.
-DateTime reminderTime(CalendarEvent event) {
+/// A 24 órás emlékeztető fali óra szerint számol (nap − 1), nem 24 óra
+/// kivonásával — így a nyári időszámítás váltásának hetében sem csúszik el egy
+/// órát. Az egyórásnál a fix időtartam-kivonás a helyes (abszolút idő).
+List<({DateTime when, String body, int slot})> remindersFor(
+  CalendarEvent event,
+) {
   final at = event.at;
-  return event.allDay
-      ? DateTime(at.year, at.month, at.day - 1, _allDayReminderHour)
-      : DateTime(at.year, at.month, at.day - 1, at.hour, at.minute);
+  final start = formatStart(event);
+  if (event.allDay) {
+    // ponytail: egész napos eseménynél nincs értelmes „egy órával előtte” — a
+    // kezdés helyi éjfél. Marad az egyetlen előző esti emlékeztető.
+    return [
+      (
+        when: DateTime(at.year, at.month, at.day - 1, _allDayReminderHour),
+        body: 'Holnap — $start',
+        slot: 0,
+      ),
+    ];
+  }
+  return [
+    (
+      when: DateTime(at.year, at.month, at.day - 1, at.hour, at.minute),
+      body: 'Holnap — $start',
+      slot: 0,
+    ),
+    (
+      when: at.subtract(const Duration(hours: 1)),
+      body: 'Egy óra múlva — $start',
+      slot: 1,
+    ),
+  ];
 }
 
 /// Amit legutóbb kiütemeztünk. Lásd [remindersSignature].
@@ -44,7 +69,8 @@ String _scheduled = '';
 /// újraütemezni.
 String remindersSignature(List<CalendarEvent> events) => [
   for (final event in events)
-    '${event.id}|${event.title}|${reminderTime(event)}|${formatStart(event)}',
+    for (final r in remindersFor(event))
+      '${event.id}|${event.title}|${r.when}|${r.body}',
 ].join(';');
 
 /// Újraütemezi az emlékeztetőket a kapott eseményekre.
@@ -74,26 +100,32 @@ Future<void> scheduleReminders(List<CalendarEvent> events) async {
 
   final now = DateTime.now();
   for (final event in events) {
-    final when = reminderTime(event);
-    // Ma vagy holnap kezdődő eseménynél az emlékeztető ideje már elmúlt.
-    if (!when.isAfter(now)) continue;
+    // Két azonosító eseményenként (24h + 1h). A felezett tartományba képezve,
+    // *2+slot-tal, hogy egymást ne írják felül és az edzés-azonosítókkal se
+    // ütközzenek (base*2+1 < workoutIdBase marad).
+    final base = event.id.hashCode.abs() % (workoutIdBase ~/ 2);
+    for (final r in remindersFor(event)) {
+      // Az emlékeztető ideje már elmúlhatott (ma kezdődő esemény 24h-ága, vagy
+      // egy órán belüli kezdés) — azt kihagyjuk, a másik ág még mehet.
+      if (!r.when.isAfter(now)) continue;
 
-    await notifications.zonedSchedule(
-      // A tartományon belülre képezve, hogy az edzés-azonosítókkal ne ütközzön.
-      id: event.id.hashCode.abs() % workoutIdBase,
-      title: event.title,
-      body: 'Holnap — ${formatStart(event)}',
-      // A koppintás (órán a „Megnyitás telefonon”) az eseménylistára visz.
-      payload: '/',
-      // ponytail: UTC-ben ütemezünk. A plugin az abszolút időpontot küldi a
-      // platformnak (ISO8601, offsettel), így nem kell külön csomag a készülék
-      // IANA időzónájának kiderítéséhez. Ismétlődő értesítéshez
-      // (matchDateTimeComponents) ez már nem lenne elég.
-      scheduledDate: tz.TZDateTime.from(when, tz.UTC),
-      notificationDetails: _details,
-      // Egy nappal korábbi emlékeztetőnek nem kell másodperc-pontosság, cserébe
-      // nem kell hozzá az Android 14+ exact alarm engedély sem.
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-    );
+      await notifications.zonedSchedule(
+        id: base * 2 + r.slot,
+        title: event.title,
+        body: r.body,
+        // A koppintás (órán a „Megnyitás telefonon”) az eseménylistára visz.
+        payload: '/',
+        // ponytail: UTC-ben ütemezünk. A plugin az abszolút időpontot küldi a
+        // platformnak (ISO8601, offsettel), így nem kell külön csomag a készülék
+        // IANA időzónájának kiderítéséhez. Ismétlődő értesítéshez
+        // (matchDateTimeComponents) ez már nem lenne elég.
+        scheduledDate: tz.TZDateTime.from(r.when, tz.UTC),
+        notificationDetails: _details,
+        // Az emlékeztetőnek nem kell másodperc-pontosság (egy órás előjelzésen a
+        // néhány perc doze-csúszás elfér), cserébe nem kell hozzá az Android 14+
+        // exact alarm engedély sem.
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      );
+    }
   }
 }
