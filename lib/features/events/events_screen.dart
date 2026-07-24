@@ -24,21 +24,38 @@ class EventsScreen extends ConsumerStatefulWidget {
 
 class _EventsScreenState extends ConsumerState<EventsScreen> {
   late final AppLifecycleListener _lifecycle;
+  // Egyszerre csak egy frissítés-ellenőrzés/párbeszéd fusson: a resume többször
+  // is érkezhet, és a nyitott párbeszéd alatt sem akarunk másodikat rátenni.
+  bool _checkingUpdate = false;
 
   @override
   void initState() {
     super.initState();
-    // Előtérbe kerüléskor újralekérünk: a naptár közben változhatott, és az
-    // engedély megadása után is ide térünk vissza. Hidegindításkor nincs
-    // állapotváltás, tehát ez nem duplázza az induló lekérést.
+    // Előtérbe kerüléskor újralekérünk (a naptár közben változhatott, és az
+    // engedély megadása után is ide térünk vissza) ÉS újra megnézzük, van-e
+    // frissítés. A felhasználó jellemzően így „nyitja újra" az appot: háttérbe
+    // teszi, majd visszahozza — ez nem hidegindítás, tehát az initState nem fut
+    // le újra, csak ez a resume. Enélkül a reopen sosem ajánlana új verziót.
     _lifecycle = AppLifecycleListener(
-      onResume: () => ref.invalidate(upcomingEventsProvider),
+      onResume: () {
+        ref.invalidate(upcomingEventsProvider);
+        _promptUpdate();
+      },
     );
-    // Hidegindításkor egyszer (a fül életben marad az IndexedStackben): van-e
-    // újabb kiadás a GitHubon? Ha igen, az első képkocka után felajánljuk.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) maybePromptUpdate(context);
-    });
+    // Hidegindításkor is: az onResume a legelső (induló) resume-ra nem hívódik.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _promptUpdate());
+  }
+
+  /// Frissítés-ajánlás re-entry ellen védve: ha épp fut egy ellenőrzés, vagy
+  /// nyitva a párbeszéd, a következő resume nem indít másodikat.
+  Future<void> _promptUpdate() async {
+    if (_checkingUpdate || !mounted) return;
+    _checkingUpdate = true;
+    try {
+      await maybePromptUpdate(context);
+    } finally {
+      _checkingUpdate = false;
+    }
   }
 
   @override
