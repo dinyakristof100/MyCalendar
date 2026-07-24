@@ -71,6 +71,9 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
           // A friss lekérés az emlékeztetőket is újraütemezi (lásd a listent).
           if (await showEventForm(context) ?? false) {
             ref.invalidate(upcomingEventsProvider);
+            // A naptárnézet külön providerből él — az egész hónapcsaládot
+            // érvénytelenítjük, hogy az új esemény ott is azonnal látszódjon.
+            ref.invalidate(monthEventsProvider);
           }
         },
         child: const Icon(Icons.add),
