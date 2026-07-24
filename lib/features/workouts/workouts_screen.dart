@@ -518,7 +518,7 @@ class _DayCard extends StatelessWidget {
     final muted = theme.colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Ink(
+      child: AppCard(
         decoration: done
             ? BoxDecoration(
                 color: _done.withValues(alpha: 0.14),

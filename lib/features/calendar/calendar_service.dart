@@ -29,6 +29,24 @@ Future<void> createEvent({
   'end': end.millisecondsSinceEpoch,
 });
 
+/// Meglévő esemény címének és időpontjának felülírása. Csak ezt a három mezőt
+/// írja — a leírást és a helyet a natív oldal érintetlenül hagyja.
+Future<void> updateEvent({
+  required String id,
+  required String title,
+  required DateTime start,
+  required DateTime end,
+}) => _channel.invokeMethod<void>('updateEvent', {
+  'id': id,
+  'title': title,
+  'begin': start.millisecondsSinceEpoch,
+  'end': end.millisecondsSinceEpoch,
+});
+
+/// Esemény törlése az eszköz naptárából.
+Future<void> deleteEvent(String id) =>
+    _channel.invokeMethod<void>('deleteEvent', {'id': id});
+
 /// Egy naptáresemény annyi mezővel, amennyit az app tényleg használ.
 class CalendarEvent {
   const CalendarEvent({

@@ -199,19 +199,27 @@ class _NextUpCard extends ConsumerWidget {
     final when = dayLabel(event.at, today: today);
     final category = ref.watch(categoriesProvider).of(event.id);
 
+    // Kategóriás eseménynél a hero-kártya is a kategória színét viseli, és a
+    // szöveg olyan (fehér/fekete), amelyik biztosan olvasható rajta (readableOn).
+    // Kategória nélkül a téma primaryContainer marad.
+    final onCat = category == null ? null : readableOn(category.color);
+    final fg = onCat ?? scheme.onPrimaryContainer;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(_gutter, 4, _gutter, 8),
-      // Ink és nem Container: így a koppintás hulláma a kártya felülete fölött
-      // látszik, nem alatta.
-      child: Ink(
-        decoration: cardSurface(
-          theme,
-          radius: 30,
-          color: scheme.primaryContainer,
-        ),
+      child: AppCard(
+        decoration: category == null
+            ? cardSurface(theme, radius: 30, color: scheme.primaryContainer)
+            : BoxDecoration(
+                color: category.color,
+                borderRadius: BorderRadius.circular(30),
+              ),
         child: InkWell(
           onTap: () => showEventDetails(context, event),
           borderRadius: BorderRadius.circular(30),
+          // A színes háttéren is látsszon a koppintás-hullám.
+          splashColor: onCat?.withValues(alpha: 0.14),
+          highlightColor: onCat?.withValues(alpha: 0.08),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
             child: Column(
@@ -220,7 +228,7 @@ class _NextUpCard extends ConsumerWidget {
                 Text(
                   'KÖVETKEZŐ',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onPrimaryContainer.withValues(alpha: 0.7),
+                    color: fg.withValues(alpha: 0.7),
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.6,
                   ),
@@ -231,7 +239,7 @@ class _NextUpCard extends ConsumerWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.headlineSmall?.copyWith(
-                    color: scheme.onPrimaryContainer,
+                    color: fg,
                     fontWeight: FontWeight.w600,
                     height: 1.2,
                   ),
@@ -242,13 +250,13 @@ class _NextUpCard extends ConsumerWidget {
                     Icon(
                       time == null ? Icons.today_outlined : Icons.schedule,
                       size: 18,
-                      color: scheme.onPrimaryContainer.withValues(alpha: 0.8),
+                      color: fg.withValues(alpha: 0.8),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       time == null ? '$when · egész nap' : '$when · $time',
                       style: theme.textTheme.titleSmall?.copyWith(
-                        color: scheme.onPrimaryContainer.withValues(alpha: 0.9),
+                        color: fg.withValues(alpha: 0.9),
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
@@ -259,14 +267,18 @@ class _NextUpCard extends ConsumerWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CategoryDot(color: category.color, size: 10),
+                      // A kártya már a kategória színe — pötty helyett címke-ikon
+                      // az olvasható színnel, hogy elváljon a háttértől.
+                      Icon(
+                        Icons.label,
+                        size: 16,
+                        color: fg.withValues(alpha: 0.9),
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         category.name,
                         style: theme.textTheme.labelMedium?.copyWith(
-                          color: scheme.onPrimaryContainer.withValues(
-                            alpha: 0.9,
-                          ),
+                          color: fg.withValues(alpha: 0.9),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -329,78 +341,64 @@ class _EventCard extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final time = formatTime(event);
     final category = ref.watch(categoriesProvider).of(event.id);
-    // Kategóriás eseménynél a kategória színe, egyébként a téma akcentje.
-    final accent = category?.color ?? scheme.primary;
+    // Kategóriás eseménynél a KÁRTYA HÁTTERE maga a kategória színe, és a szöveg
+    // olyan (fehér/fekete), amelyik biztosan olvasható rajta (readableOn) — így a
+    // betűszín minden kategóriaszín felett látszik. Kategória nélkül a régi,
+    // semleges kártya marad.
+    final onCat = category == null ? null : readableOn(category.color);
+    final accent = onCat ?? scheme.primary; // időpont színe
+    final titleColor = onCat ?? scheme.onSurface; // cím színe
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(_gutter, 5, _gutter, 5),
-      child: Ink(
-        decoration: cardSurface(theme),
+      child: AppCard(
+        decoration: category == null
+            ? cardSurface(theme)
+            : BoxDecoration(
+                color: category.color,
+                borderRadius: BorderRadius.circular(22),
+              ),
         child: InkWell(
           onTap: () => showEventDetails(context, event),
           borderRadius: BorderRadius.circular(22),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+          splashColor: onCat?.withValues(alpha: 0.14),
+          highlightColor: onCat?.withValues(alpha: 0.08),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 15, 18, 17),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Bal oldali színsáv csak akkor, ha van kategória — enélkül a
-                // kártya a régi, letisztult formáját tartja.
-                if (category != null)
-                  Container(
-                    width: 5,
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: const BorderRadius.horizontal(
-                        left: Radius.circular(22),
+                Row(
+                  children: [
+                    Text(
+                      time ?? 'EGÉSZ NAP',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: time == null ? 1.2 : 0.2,
+                        // Egyforma szélességű számjegyek, hogy az órák a kártyák
+                        // között is egy vonalba essenek.
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                  ),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      category != null ? 14 : 18,
-                      15,
-                      18,
-                      17,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              time ?? 'EGÉSZ NAP',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: accent,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: time == null ? 1.2 : 0.2,
-                                // Egyforma szélességű számjegyek, hogy az órák a
-                                // kártyák között is egy vonalba essenek.
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures(),
-                                ],
-                              ),
-                            ),
-                            if (category != null) ...[
-                              const Spacer(),
-                              Text(
-                                category.name,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ],
+                    if (category != null) ...[
+                      const Spacer(),
+                      Text(
+                        category.name,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: onCat!.withValues(alpha: 0.85),
+                          fontWeight: FontWeight.w600,
                         ),
-                        const SizedBox(height: 5),
-                        Text(
-                          event.title,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            height: 1.25,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  event.title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: titleColor,
+                    height: 1.25,
                   ),
                 ),
               ],

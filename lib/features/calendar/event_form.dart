@@ -4,23 +4,28 @@ import 'package:flutter/services.dart';
 import 'calendar_service.dart';
 import 'event_groups.dart';
 
-/// Új esemény felvitele. `true`-val záródik, ha az esemény be is került a
-/// naptárba — a hívónak ilyenkor kell frissítenie a listát.
+/// Esemény felvitele vagy szerkesztése. `true`-val záródik, ha az esemény be is
+/// került / módosult a naptárban — a hívónak ilyenkor kell frissítenie a listát.
 ///
-/// [initialDay]: erre a napra nyílik az űrlap (a naptárból a kijelölt nap).
-/// Múltbeli vagy hiányzó nap esetén a következő egész óra az alapértelmezés.
-Future<bool?> showEventForm(BuildContext context, {DateTime? initialDay}) =>
-    showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (_) => _EventForm(initialDay: initialDay),
-    );
+/// [initialDay]: erre a napra nyílik az űrlap új eseménynél (a naptárból a
+/// kijelölt nap). Múltbeli vagy hiányzó nap esetén a következő egész óra.
+/// [editing]: megadva a meglévő eseményt szerkeszti, nem újat hoz létre.
+Future<bool?> showEventForm(
+  BuildContext context, {
+  DateTime? initialDay,
+  CalendarEvent? editing,
+}) => showModalBottomSheet<bool>(
+  context: context,
+  showDragHandle: true,
+  isScrollControlled: true,
+  builder: (_) => _EventForm(initialDay: initialDay, editing: editing),
+);
 
 class _EventForm extends StatefulWidget {
-  const _EventForm({this.initialDay});
+  const _EventForm({this.initialDay, this.editing});
 
   final DateTime? initialDay;
+  final CalendarEvent? editing;
 
   @override
   State<_EventForm> createState() => _EventFormState();
@@ -29,9 +34,28 @@ class _EventForm extends StatefulWidget {
 class _EventFormState extends State<_EventForm> {
   final _title = TextEditingController();
 
-  late DateTime _start = _initialStart();
-  late DateTime _end = _start.add(const Duration(hours: 1));
+  late DateTime _start;
+  late DateTime _end;
   bool _saving = false;
+
+  bool get _isEdit => widget.editing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final editing = widget.editing;
+    if (editing != null) {
+      _title.text = editing.title;
+      _start = editing.at;
+      // Egész naposnak nincs vége a modellben; a form időpontos, ezért +1 óra.
+      // ponytail: az egész napos esemény szerkesztve időpontossá válik — a form
+      // amúgy sem tud egész naposat. Ha kell, jöhet egy „egész nap" kapcsoló.
+      _end = editing.end ?? editing.at.add(const Duration(hours: 1));
+    } else {
+      _start = _initialStart();
+      _end = _start.add(const Duration(hours: 1));
+    }
+  }
 
   /// Ma (vagy nap nélkül): a következő egész óra — a legtöbb esetben így elég
   /// a címet beírni. Jövőbeli napra: reggel 9. Múltbeli napra nem nyitunk,
@@ -68,13 +92,20 @@ class _EventFormState extends State<_EventForm> {
   Future<void> _pickDate({required bool end}) async {
     final current = end ? _end : _start;
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // A vége legkorábban a kezdés napján lehet, a kezdés pedig ma — de egy
+    // szerkesztett, már elmúlt esemény kezdete a múltban van, és a picker
+    // elszáll, ha az induló dátum a firstDate elé esne. Ezért a padlót
+    // sosem visszük az aktuális érték napja fölé.
+    final startFloor = _start.isBefore(today)
+        ? DateTime(_start.year, _start.month, _start.day)
+        : today;
     final day = await showDatePicker(
       context: context,
       initialDate: current,
-      // A vége legkorábban a kezdés napján lehet, a kezdés pedig ma.
       firstDate: end
           ? DateTime(_start.year, _start.month, _start.day)
-          : DateTime(now.year, now.month, now.day),
+          : startFloor,
       lastDate: DateTime(now.year + 5),
     );
     if (day == null) return;
@@ -118,7 +149,17 @@ class _EventFormState extends State<_EventForm> {
     if (title.isEmpty || _saving) return;
     setState(() => _saving = true);
     try {
-      await createEvent(title: title, start: _start, end: _end);
+      final editing = widget.editing;
+      if (editing != null) {
+        await updateEvent(
+          id: editing.id,
+          title: title,
+          start: _start,
+          end: _end,
+        );
+      } else {
+        await createEvent(title: title, start: _start, end: _end);
+      }
       if (mounted) Navigator.pop(context, true);
     } on PlatformException catch (e) {
       if (!mounted) return;
@@ -151,7 +192,7 @@ class _EventFormState extends State<_EventForm> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Új esemény',
+                _isEdit ? 'Esemény szerkesztése' : 'Új esemény',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
@@ -159,7 +200,7 @@ class _EventFormState extends State<_EventForm> {
               const SizedBox(height: 20),
               TextField(
                 controller: _title,
-                autofocus: true,
+                autofocus: !_isEdit,
                 textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _save(),
@@ -195,7 +236,7 @@ class _EventFormState extends State<_EventForm> {
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Mentés a naptárba'),
+                    : Text(_isEdit ? 'Módosítások mentése' : 'Mentés a naptárba'),
               ),
             ],
           ),

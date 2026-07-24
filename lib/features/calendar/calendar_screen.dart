@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_scaffold.dart';
+import '../../core/ui.dart';
 import '../auth/auth_controller.dart';
 import 'calendar_days.dart';
 import 'calendar_service.dart';
@@ -574,7 +575,7 @@ class _DayEventTile extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Ink(
+      child: AppCard(
         decoration: BoxDecoration(
           color: scheme.surfaceContainerLow,
           borderRadius: BorderRadius.circular(16),

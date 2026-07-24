@@ -2,6 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+/// A [background] fölött biztosan olvasható szövegszín: fehér vagy fekete —
+/// amelyiknek nagyobb a WCAG-kontrasztaránya az adott háttérrel. Így a
+/// kategóriaszín BÁRMELY árnyalatán látszik a felirat: a világos háttér (pl.
+/// borostyán) fekete, a sötét (pl. kék) fehér szöveget kap.
+///
+/// Kontrasztarány = (világosabb luminancia + 0.05) / (sötétebb + 0.05); a
+/// fehérrel és feketével számolt közül a nagyobbat választjuk.
+Color readableOn(Color background) {
+  final lum = background.computeLuminance();
+  final contrastWithWhite = 1.05 / (lum + 0.05); // (1.0 + 0.05) / (lum + 0.05)
+  final contrastWithBlack = (lum + 0.05) / 0.05; // (lum + 0.05) / (0.0 + 0.05)
+  return contrastWithWhite >= contrastWithBlack ? Colors.white : Colors.black;
+}
+
 /// Kártyafelület árnyékkal.
 ///
 /// Sötét témában az árnyék láthatatlan — ott a mélységet világosabb felület és
@@ -25,6 +39,29 @@ BoxDecoration cardSurface(ThemeData theme, {double radius = 22, Color? color}) {
               offset: const Offset(0, 6),
             ),
           ],
+  );
+}
+
+/// Kártya megbízhatóan kirajzolt háttérrel és koppintás-hullámmal.
+///
+/// NEM `Ink`-et használ: az `Ink` a hátterét az ős `Material`-re bízza, és a
+/// beúszó (opacity-0 `FadeTransition` — lásd [Appear]) alatt induló kártyáknál a
+/// Material nem rajzolja újra a hátteret, amíg egy koppintás vagy görgetés nem
+/// kényszeríti. Így a kártya tartalma (szöveg) látszik, a háttere viszont
+/// hiányzik a képernyő megérintéséig. A `DecoratedBox` maga festi a hátteret —
+/// mindig az első képkockán —, a koppintás-hullámot pedig egy helyi átlátszó
+/// `Material` adja. A `decoration`/`child` paraméter az `Ink`-ével egyezik, így
+/// a hívás egy-az-egyben cserélhető.
+class AppCard extends StatelessWidget {
+  const AppCard({required this.decoration, required this.child, super.key});
+
+  final Decoration decoration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: decoration,
+    child: Material(type: MaterialType.transparency, child: child),
   );
 }
 

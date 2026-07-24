@@ -43,6 +43,8 @@ class MainActivity : FlutterActivity() {
                     "upcomingEvents" -> handleUpcomingEvents(call.argument<Int>("days") ?: 14, result)
                     "eventsInRange" -> handleEventsInRange(call, result)
                     "createEvent" -> handleCreateEvent(call, result)
+                    "updateEvent" -> handleUpdateEvent(call, result)
+                    "deleteEvent" -> handleDeleteEvent(call, result)
                     "versionCode" -> result.success(currentVersionCode())
                     else -> result.notImplemented()
                 }
@@ -98,15 +100,20 @@ class MainActivity : FlutterActivity() {
         return false
     }
 
+    /**
+     * Írási engedély megléte íráshoz (create/update/delete). Ha nincs, felkérjük
+     * — itt a felhasználó épp erre a műveletre vár, ezért a kérdés minden
+     * próbálkozásnál mehet, nem kell a `permissionAsked` ciklusvédő.
+     */
+    private fun ensureWritePermission(result: MethodChannel.Result): Boolean {
+        if (has(Manifest.permission.WRITE_CALENDAR)) return true
+        requestCalendarPermissions()
+        result.error("PERMISSION_DENIED", "Nincs naptár-írási engedély.", null)
+        return false
+    }
+
     private fun handleCreateEvent(call: MethodCall, result: MethodChannel.Result) {
-        if (!has(Manifest.permission.WRITE_CALENDAR)) {
-            // Itt a felhasználó épp erre a műveletre vár, ezért a kérdés
-            // minden próbálkozásnál mehet — nincs szükség a fenti ciklusvédő
-            // jelzőre.
-            requestCalendarPermissions()
-            result.error("PERMISSION_DENIED", "Nincs naptár-írási engedély.", null)
-            return
-        }
+        if (!ensureWritePermission(result)) return
         try {
             // A milliszekundum nem fér `Int`-be, a codec ezért `Long`-ként
             // hozza — de a `Number` biztosan illeszkedik mindkettőre.
@@ -119,6 +126,48 @@ class MainActivity : FlutterActivity() {
             )
         } catch (e: Exception) {
             result.error("INSERT_FAILED", e.message, null)
+        }
+    }
+
+    /**
+     * Meglévő esemény címének és időpontjának módosítása. Csak ezt a három
+     * mezőt írja, a többit (leírás, hely) érintetlenül hagyja.
+     *
+     * ponytail: az `id` az esemény sora, nem egy ismétlődés-előfordulásé — az
+     * app nem hoz létre ismétlődő eseményt. Egy szinkronizált ismétlődő sorozat
+     * szerkesztése az egész sorozatra hatna; ha ez kell, jöhet az
+     * `Instances`-alapú kivétel-kezelés.
+     */
+    private fun handleUpdateEvent(call: MethodCall, result: MethodChannel.Result) {
+        if (!ensureWritePermission(result)) return
+        try {
+            val id = call.argument<String>("id")!!.toLong()
+            val values = ContentValues().apply {
+                put(CalendarContract.Events.TITLE, call.argument<String>("title")!!)
+                put(CalendarContract.Events.DTSTART, call.argument<Number>("begin")!!.toLong())
+                put(CalendarContract.Events.DTEND, call.argument<Number>("end")!!.toLong())
+            }
+            val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id)
+            if (contentResolver.update(uri, values, null, null) == 0) {
+                error("A naptár nem találta a módosítandó eseményt.")
+            }
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("UPDATE_FAILED", e.message, null)
+        }
+    }
+
+    private fun handleDeleteEvent(call: MethodCall, result: MethodChannel.Result) {
+        if (!ensureWritePermission(result)) return
+        try {
+            val id = call.argument<String>("id")!!.toLong()
+            val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id)
+            if (contentResolver.delete(uri, null, null) == 0) {
+                error("A naptár nem találta a törlendő eseményt.")
+            }
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("DELETE_FAILED", e.message, null)
         }
     }
 

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'calendar_service.dart';
 import 'event_categories.dart';
+import 'event_form.dart';
 import 'event_groups.dart';
 
 /// Az esemény részletei alulról felcsúszó lapon.
@@ -68,11 +70,88 @@ class _EventDetails extends ConsumerWidget {
                 _Detail(icon: Icons.place_outlined, text: location),
               if (event.description case final description?)
                 _Detail(icon: Icons.notes_outlined, text: description),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _edit(context, ref),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Szerkesztés'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  IconButton(
+                    onPressed: () => _delete(context, ref),
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Törlés',
+                    style: IconButton.styleFrom(
+                      foregroundColor: theme.colorScheme.error,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// Szerkesztés: az űrlap ugyanennek az eseménynek az adataival nyílik.
+  /// Mentés után frissítjük a listákat és bezárjuk a részletek lapot.
+  Future<void> _edit(BuildContext context, WidgetRef ref) async {
+    final changed = await showEventForm(context, editing: event);
+    if (changed != true) return;
+    _refresh(ref);
+    if (context.mounted) Navigator.pop(context);
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Esemény törlése'),
+        content: Text('Biztosan törlöd? „${event.title}"'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Mégse'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            child: const Text('Törlés'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await deleteEvent(event.id);
+      _refresh(ref);
+      if (context.mounted) Navigator.pop(context);
+    } on PlatformException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.code == permissionDeniedCode
+                ? 'Engedélyezd a naptár írását, majd próbáld újra.'
+                : 'Nem sikerült törölni: ${e.message}',
+          ),
+        ),
+      );
+    }
+  }
+
+  /// Mindkét nézet forrását érvénytelenítjük — a lista- és a naptárnézet is
+  /// azonnal a friss állapotot mutatja (az emlékeztetők is újraütemeződnek).
+  void _refresh(WidgetRef ref) {
+    ref.invalidate(upcomingEventsProvider);
+    ref.invalidate(monthEventsProvider);
   }
 }
 
