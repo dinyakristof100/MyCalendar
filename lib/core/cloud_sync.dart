@@ -104,7 +104,7 @@ final cloudSyncProvider = Provider<void>((ref) {
     if (!signedIn || wasSignedIn) return; // csak a bejelentkezés pillanatában
     unawaited(
       pullFromCloud().then((_) {
-        ref.invalidate(themeModeProvider);
+        ref.invalidate(appStyleProvider);
         ref.invalidate(categoriesProvider);
         ref.invalidate(workoutPlansProvider);
         ref.invalidate(workoutProgressProvider);

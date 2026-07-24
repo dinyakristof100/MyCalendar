@@ -8,21 +8,106 @@ import '../auth/auth_controller.dart';
 
 const _key = 'themeMode';
 
-/// Az app színkészlete. Alapértelmezés: a telefon beállítása.
-final themeModeProvider = NotifierProvider<ThemeModeController, ThemeMode>(
-  ThemeModeController.new,
+/// A klasszikus három mód akcentje — ugyanez az indigó van az ikonban és a
+/// webes oldalakon.
+const _indigo = Color(0xFF3F51B5);
+
+/// Egy választható megjelenés: fényerő + akcentszín egyben. Az [id] kerül az
+/// adatbázisba, ezért a régi „system/light/dark” értékek szándékosan azonosak
+/// maradnak — a korábban mentett választás így érvényben marad.
+class AppStyle {
+  const AppStyle({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.mode,
+    required this.seed,
+    this.subtitle,
+  });
+
+  final String id;
+  final String label;
+  final String? subtitle;
+  final IconData icon;
+  final ThemeMode mode;
+  final Color seed;
+}
+
+/// A választható stílusok. Az első három a régi rendszer/világos/sötét, utána a
+/// saját paletták. Új stílushoz elég ide egy sort felvenni.
+const appStyles = <AppStyle>[
+  AppStyle(
+    id: 'system',
+    label: 'Rendszer szerint',
+    subtitle: 'A telefon beállítását követi',
+    icon: Icons.brightness_auto_outlined,
+    mode: ThemeMode.system,
+    seed: _indigo,
+  ),
+  AppStyle(
+    id: 'light',
+    label: 'Világos',
+    icon: Icons.light_mode_outlined,
+    mode: ThemeMode.light,
+    seed: _indigo,
+  ),
+  AppStyle(
+    id: 'dark',
+    label: 'Sötét',
+    icon: Icons.dark_mode_outlined,
+    mode: ThemeMode.dark,
+    seed: _indigo,
+  ),
+  AppStyle(
+    id: 'girly',
+    label: 'Csajos',
+    subtitle: 'Rózsaszín, világos',
+    icon: Icons.favorite_outline,
+    mode: ThemeMode.light,
+    seed: Color(0xFFEC407A),
+  ),
+  AppStyle(
+    id: 'manly',
+    label: 'Pasis',
+    subtitle: 'Acélos, sötét',
+    icon: Icons.fitness_center_outlined,
+    mode: ThemeMode.dark,
+    seed: Color(0xFF00695C),
+  ),
+  AppStyle(
+    id: 'clean',
+    label: 'Letisztult',
+    subtitle: 'Visszafogott, semleges',
+    icon: Icons.circle_outlined,
+    mode: ThemeMode.light,
+    seed: Color(0xFF546E7A),
+  ),
+  AppStyle(
+    id: 'kids',
+    label: 'Gyerekbarát',
+    subtitle: 'Vidám, élénk',
+    icon: Icons.child_care_outlined,
+    mode: ThemeMode.light,
+    seed: Color(0xFFFF9800),
+  ),
+];
+
+/// Az app megjelenése. Alapértelmezés (ismeretlen vagy hiányzó érték esetén is)
+/// az első stílus: a rendszer szerinti.
+final appStyleProvider = NotifierProvider<AppStyleController, AppStyle>(
+  AppStyleController.new,
 );
 
-class ThemeModeController extends Notifier<ThemeMode> {
+class AppStyleController extends Notifier<AppStyle> {
   @override
-  ThemeMode build() =>
-      // Ismeretlen (pl. régi vagy kézzel írt) érték esetén is a rendszer a
-      // biztonságos alapértelmezés.
-      ThemeMode.values.asNameMap()[prefs.getString(_key)] ?? ThemeMode.system;
+  AppStyle build() => appStyles.firstWhere(
+    (s) => s.id == prefs.getString(_key),
+    orElse: () => appStyles.first,
+  );
 
-  Future<void> set(ThemeMode mode) async {
-    state = mode;
-    await saveSetting(_key, mode.name);
+  Future<void> set(AppStyle style) async {
+    state = style;
+    await saveSetting(_key, style.id);
   }
 }
 
@@ -62,31 +147,25 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const Divider(height: 24),
           const _SectionTitle('Színkészlet'),
-          RadioGroup<ThemeMode>(
-            groupValue: ref.watch(themeModeProvider),
-            onChanged: (mode) {
-              if (mode != null) {
-                ref.read(themeModeProvider.notifier).set(mode);
+          RadioGroup<AppStyle>(
+            groupValue: ref.watch(appStyleProvider),
+            onChanged: (style) {
+              if (style != null) {
+                ref.read(appStyleProvider.notifier).set(style);
               }
             },
-            child: const Column(
+            child: Column(
               children: [
-                RadioListTile(
-                  value: ThemeMode.light,
-                  title: Text('Világos'),
-                  secondary: Icon(Icons.light_mode_outlined),
-                ),
-                RadioListTile(
-                  value: ThemeMode.dark,
-                  title: Text('Sötét'),
-                  secondary: Icon(Icons.dark_mode_outlined),
-                ),
-                RadioListTile(
-                  value: ThemeMode.system,
-                  title: Text('Rendszer szerint'),
-                  subtitle: Text('A telefon beállítását követi'),
-                  secondary: Icon(Icons.brightness_auto_outlined),
-                ),
+                for (final style in appStyles)
+                  RadioListTile(
+                    value: style,
+                    title: Text(style.label),
+                    subtitle: style.subtitle == null
+                        ? null
+                        : Text(style.subtitle!),
+                    // A seed színnel festett ikon előnézetet ad a palettáról.
+                    secondary: Icon(style.icon, color: style.seed),
+                  ),
               ],
             ),
           ),
