@@ -111,8 +111,16 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
   void initState() {
     super.initState();
     try {
+      // usePackageInstaller: a modern PackageInstaller session API — ez kell
+      // Android 14+-on (a régi ACTION_INSTALL_PACKAGE út deprecated, és a hozzá
+      // tartozó FileProvidert sem deklaráljuk). Ehhez a manifestben regisztrálni
+      // kell az ota_update InstallResultReceiver-ét — lásd AndroidManifest.xml.
       OtaUpdate()
-          .execute(_apkUrl, destinationFilename: 'mycalendar.apk')
+          .execute(
+            _apkUrl,
+            destinationFilename: 'mycalendar.apk',
+            usePackageInstaller: true,
+          )
           .listen(_onEvent, onError: (_) => _fail());
     } catch (_) {
       _fail();
@@ -128,9 +136,12 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
           _label = 'Letöltés…';
         });
       case OtaStatus.INSTALLING:
-        Navigator.of(context).maybePop(); // az OS telepítője jön
+      case OtaStatus.INSTALLATION_DONE:
+        // A rendszer telepítője átveszi (és sikeres telepítéskor lecseréli az
+        // appot) — a saját párbeszédünkre innen már nincs szükség.
+        Navigator.of(context).maybePop();
       default:
-        _fail(); // engedély hiánya, letöltési hiba, checksum stb.
+        _fail(); // engedélyhiány, letöltési hiba, checksum stb.
     }
   }
 

@@ -55,6 +55,19 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
+
+        <!-- Az ota_update a PackageInstaller session eredményét ezen a receiveren
+             kapja meg, és ez indítja a rendszer telepítő-megerősítő ablakát.
+             Enélkül a letöltés után a telepítés némán elhal. A providert NEM
+             deklaráljuk: a modern PackageInstaller út (usePackageInstaller: true,
+             app_update.dart) nem használ FileProvidert. -->
+        <receiver
+            android:name="sk.fourq.otaupdate.InstallResultReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="${applicationId}.ACTION_INSTALL_COMPLETE"/>
+            </intent-filter>
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
