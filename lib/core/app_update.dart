@@ -38,7 +38,10 @@ Future<({String versionName, int versionCode})?> checkForUpdate() async {
     final current = await _channel.invokeMethod<int>('versionCode') ?? 0;
     final req = await client.getUrl(Uri.parse('$_repoApi/releases/latest'));
     req.headers
-      ..set(HttpHeaders.userAgentHeader, 'MyCalendar-updater') // GitHub kötelező
+      ..set(
+        HttpHeaders.userAgentHeader,
+        'MyCalendar-updater',
+      ) // GitHub kötelező
       ..set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
     final resp = await req.close();
     if (resp.statusCode != 200) return null;
@@ -66,8 +69,8 @@ Future<void> maybePromptUpdate(BuildContext context) async {
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Új verzió elérhető'),
-      content: Text(
-        'A(z) ${info.versionName} verzió letölthető. Frissíted most? '
+      content: const Text(
+        'Elérhető egy frissebb verzió, ajánlott telepíteni. '
         'A letöltés után a rendszer telepítője kér majd megerősítést.',
       ),
       actions: [
@@ -149,7 +152,9 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
     if (!mounted) return;
     Navigator.of(context).maybePop();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('A frissítés nem sikerült. Próbáld később.')),
+      const SnackBar(
+        content: Text('A frissítés nem sikerült. Próbáld később.'),
+      ),
     );
   }
 

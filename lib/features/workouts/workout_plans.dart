@@ -98,15 +98,46 @@ class WorkoutPlansController extends Notifier<WorkoutPlans> {
   /// Az új terv egyből az aktív lesz — aki most vitte fel, arra kíváncsi.
   Future<void> add(WorkoutPlan plan) async {
     state = WorkoutPlans(plans: [...state.plans, plan], activeId: plan.id);
-    await saveSetting(
-      _plansKey,
-      jsonEncode([for (final p in state.plans) p.toJson()]),
-    );
+    await _save();
     await saveSetting(_activeKey, plan.id);
+  }
+
+  /// Meglévő terv felülírása (név, hetek típusa, napok). Az azonosító marad, így
+  /// a heti haladás is a tervnél marad — a napok számának változását a
+  /// `settleWeek` kezeli.
+  Future<void> update(WorkoutPlan plan) async {
+    state = WorkoutPlans(
+      plans: [
+        for (final p in state.plans)
+          if (p.id == plan.id) plan else p,
+      ],
+      activeId: state.activeId,
+    );
+    await _save();
+  }
+
+  /// Terv törlése. Ha az aktívat törlik, a maradék első terve lép a helyére —
+  /// üres listánál nincs aktív.
+  Future<void> remove(String id) async {
+    final plans = [
+      for (final p in state.plans)
+        if (p.id != id) p,
+    ];
+    final active = state.activeId == id
+        ? (plans.isEmpty ? null : plans.first.id)
+        : state.activeId;
+    state = WorkoutPlans(plans: plans, activeId: active);
+    await _save();
+    await saveSetting(_activeKey, active ?? '');
   }
 
   Future<void> setActive(String id) async {
     state = WorkoutPlans(plans: state.plans, activeId: id);
     await saveSetting(_activeKey, id);
   }
+
+  Future<void> _save() => saveSetting(
+    _plansKey,
+    jsonEncode([for (final p in state.plans) p.toJson()]),
+  );
 }

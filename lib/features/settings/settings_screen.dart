@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/app_scaffold.dart';
 import '../../core/cloud_sync.dart';
@@ -182,6 +183,17 @@ class SettingsScreen extends ConsumerWidget {
             ),
             value: ref.watch(carryOverProvider),
             onChanged: (on) => ref.read(carryOverProvider.notifier).set(on),
+          ),
+          const Divider(height: 24),
+          const _SectionTitle('Segítség'),
+          ListTile(
+            leading: const Icon(Icons.help_outline),
+            title: const Text('Súgó és útmutató'),
+            subtitle: const Text(
+              'Mi hol van az appban — témánként, és a bemutató is újranézhető.',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/help'),
           ),
           const Divider(height: 24),
           Padding(

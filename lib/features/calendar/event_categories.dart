@@ -104,6 +104,25 @@ class CategoryController extends Notifier<CategoryState> {
     return category;
   }
 
+  /// Név és szín felülírása. A hozzárendelések maradnak: ugyanaz a kategória,
+  /// csak máshogy hívják vagy más a színe.
+  Future<EventCategory> updateCategory(
+    String id,
+    String name,
+    Color color,
+  ) async {
+    final updated = EventCategory(id: id, name: name, color: color);
+    state = CategoryState(
+      categories: [
+        for (final c in state.categories)
+          if (c.id == id) updated else c,
+      ],
+      assignments: state.assignments,
+    );
+    await _saveCategories();
+    return updated;
+  }
+
   /// Törléskor a rá mutató hozzárendelések is eltűnnek — különben egy esemény
   /// egy nem létező kategóriára hivatkozna.
   Future<void> deleteCategory(String id) async {
@@ -157,35 +176,46 @@ class CategoryDot extends StatelessWidget {
   );
 }
 
-/// A kategóriaválasztó lap: itt lehet kategóriát rendelni az eseményhez, újat
-/// létrehozni, vagy törölni. Ez a "kategóriák az eseményeknél" felület.
-Future<void> showCategoryPicker(BuildContext context, String eventId) {
+/// A kategóriaválasztó lap: itt lehet kategóriát választani, újat létrehozni,
+/// meglévőt átnevezni/átszínezni vagy törölni.
+///
+/// A választást [onPick] kapja meg (`null` = nincs kategória), a lap maga nem
+/// ír hozzárendelést: az esemény űrlapján még nincs azonosító, amihez kötni
+/// lehetne — ott a mentés végzi el.
+Future<void> showCategoryPicker(
+  BuildContext context, {
+  required String? selectedId,
+  required ValueChanged<String?> onPick,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (_) => _CategoryPicker(eventId: eventId),
+    builder: (_) => _CategoryPicker(selectedId: selectedId, onPick: onPick),
   );
 }
 
-/// Önálló kategória-kezelő: nincs eseményhez kötve, csak létrehozás és törlés —
-/// így nem kell előbb egy eseményt megnyitni ahhoz, hogy kategóriát lehessen
-/// csinálni. A naptár fejlécéből nyílik.
+/// Önálló kategória-kezelő: nincs eseményhez kötve, csak létrehozás,
+/// szerkesztés és törlés — így nem kell előbb egy eseményt megnyitni ahhoz,
+/// hogy kategóriát lehessen csinálni. A naptár fejlécéből nyílik.
 Future<void> showCategoryManager(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (_) => const _CategoryPicker(eventId: null),
+    builder: (_) => const _CategoryPicker(selectedId: null, onPick: null),
   );
 }
 
 class _CategoryPicker extends ConsumerWidget {
-  const _CategoryPicker({required this.eventId});
+  const _CategoryPicker({required this.selectedId, required this.onPick});
+
+  /// A most kijelölt kategória — kezelő módban mindig `null`.
+  final String? selectedId;
 
   /// `null` esetén önálló kezelő mód: nincs „Nincs kategória" sor és nincs
-  /// hozzárendelés, csak a kategóriák listája + létrehozás/törlés.
-  final String? eventId;
+  /// kiválasztás, csak a kategóriák listája + létrehozás/szerkesztés/törlés.
+  final ValueChanged<String?>? onPick;
 
   Future<void> _confirmDelete(
     BuildContext context,
@@ -221,9 +251,8 @@ class _CategoryPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final state = ref.watch(categoriesProvider);
-    final id = eventId;
-    final managing = id == null;
-    final current = managing ? null : state.of(id);
+    final pick = onPick;
+    final managing = pick == null;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -260,12 +289,12 @@ class _CategoryPicker extends ConsumerWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
                 title: const Text('Nincs kategória'),
-                trailing: current == null
+                trailing: selectedId == null
                     ? Icon(Icons.check, color: theme.colorScheme.primary)
                     : null,
-                onTap: () async {
-                  await ref.read(categoriesProvider.notifier).assign(id, null);
-                  if (context.mounted) Navigator.pop(context);
+                onTap: () {
+                  pick(null);
+                  Navigator.pop(context);
                 },
               ),
             if (managing && state.categories.isEmpty)
@@ -287,23 +316,31 @@ class _CategoryPicker extends ConsumerWidget {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (!managing && category.id == current?.id)
+                    if (category.id == selectedId)
                       Icon(Icons.check, color: theme.colorScheme.primary),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      color: theme.colorScheme.onSurfaceVariant,
-                      tooltip: 'Törlés',
-                      onPressed: () => _confirmDelete(context, ref, category),
+                    PopupMenuButton<bool>(
+                      icon: Icon(
+                        Icons.more_vert,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      tooltip: 'Műveletek',
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: true, child: Text('Szerkesztés')),
+                        PopupMenuItem(value: false, child: Text('Törlés')),
+                      ],
+                      onSelected: (edit) => edit
+                          ? _showCategoryDialog(context, editing: category)
+                          : _confirmDelete(context, ref, category),
                     ),
                   ],
                 ),
+                // Kezelő módban a sor koppintása is a szerkesztést nyitja — ott
+                // nincs mit kiválasztani.
                 onTap: managing
-                    ? null
-                    : () async {
-                        await ref
-                            .read(categoriesProvider.notifier)
-                            .assign(id, category.id);
-                        if (context.mounted) Navigator.pop(context);
+                    ? () => _showCategoryDialog(context, editing: category)
+                    : () {
+                        pick(category.id);
+                        Navigator.pop(context);
                       },
               ),
             const SizedBox(height: 8),
@@ -314,13 +351,12 @@ class _CategoryPicker extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               onPressed: () async {
-                final created = await _showCreateDialog(context, ref);
-                // Eseménynél az újat egyből rátesszük (aki most hozta létre, arra
-                // akarja); kezelő módban csak létrejön, a lap nyitva marad.
-                if (created != null && !managing) {
-                  await ref
-                      .read(categoriesProvider.notifier)
-                      .assign(id, created.id);
+                final created = await _showCategoryDialog(context);
+                // Választó módban az újat egyből rátesszük (aki most hozta
+                // létre, arra akarja); kezelő módban csak létrejön, a lap
+                // nyitva marad.
+                if (created != null && pick != null) {
+                  pick(created.id);
                   if (context.mounted) Navigator.pop(context);
                 }
               },
@@ -332,25 +368,37 @@ class _CategoryPicker extends ConsumerWidget {
   }
 }
 
-Future<EventCategory?> _showCreateDialog(BuildContext context, WidgetRef ref) {
+/// Új kategória felvitele, vagy [editing] átnevezése/átszínezése. A létrejött
+/// (illetve módosított) kategóriával tér vissza, elvetve `null`-lal.
+Future<EventCategory?> _showCategoryDialog(
+  BuildContext context, {
+  EventCategory? editing,
+}) {
   return showDialog<EventCategory>(
     context: context,
-    builder: (_) => const _CreateCategoryDialog(),
+    builder: (_) => _CategoryDialog(editing: editing),
   );
 }
 
-class _CreateCategoryDialog extends ConsumerStatefulWidget {
-  const _CreateCategoryDialog();
+class _CategoryDialog extends ConsumerStatefulWidget {
+  const _CategoryDialog({this.editing});
+
+  final EventCategory? editing;
 
   @override
-  ConsumerState<_CreateCategoryDialog> createState() =>
-      _CreateCategoryDialogState();
+  ConsumerState<_CategoryDialog> createState() => _CategoryDialogState();
 }
 
-class _CreateCategoryDialogState extends ConsumerState<_CreateCategoryDialog> {
+class _CategoryDialogState extends ConsumerState<_CategoryDialog> {
   final _name = TextEditingController();
-  Color _color = categoryColors.first;
+  late Color _color = widget.editing?.color ?? categoryColors.first;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.text = widget.editing?.name ?? '';
+  }
 
   @override
   void dispose() {
@@ -362,16 +410,20 @@ class _CreateCategoryDialogState extends ConsumerState<_CreateCategoryDialog> {
     final name = _name.text.trim();
     if (name.isEmpty || _saving) return;
     setState(() => _saving = true);
-    final created = await ref
-        .read(categoriesProvider.notifier)
-        .addCategory(name, _color);
-    if (mounted) Navigator.pop(context, created);
+    final controller = ref.read(categoriesProvider.notifier);
+    final editing = widget.editing;
+    final saved = editing == null
+        ? await controller.addCategory(name, _color)
+        : await controller.updateCategory(editing.id, name, _color);
+    if (mounted) Navigator.pop(context, saved);
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Új kategória'),
+      title: Text(
+        widget.editing == null ? 'Új kategória' : 'Kategória szerkesztése',
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,7 +477,7 @@ class _CreateCategoryDialogState extends ConsumerState<_CreateCategoryDialog> {
         ),
         FilledButton(
           onPressed: _name.text.trim().isEmpty || _saving ? null : _save,
-          child: const Text('Létrehozás'),
+          child: Text(widget.editing == null ? 'Létrehozás' : 'Mentés'),
         ),
       ],
     );

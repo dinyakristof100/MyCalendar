@@ -82,6 +82,28 @@ void main() {
     expect([for (final c in week.carried) c.content], ['régi láb']);
   });
 
+  test('a tervet rövidebbre szerkesztve a megszűnt napok pipái eltűnnek', () {
+    // A hét közben 3 napról 2-re szerkesztették a tervet: a 3. nap (index 2)
+    // pipája már nem tartozik sehova.
+    final stored = WeekProgress(
+      planId: 'a',
+      weekStart: w1,
+      done: const {0, 2},
+      skipped: const {1},
+    );
+    final shorter = _plan([
+      ['mell', 'hát'],
+    ]);
+
+    final week = settleWeek(stored, shorter, true, w1);
+    expect(week.done, {0});
+    expect(week.skipped, {1});
+    // A hét így 2 napos, és nem látszik túlteljesítettnek.
+    expect(week.targetCount(shorter), 2);
+    expect(week.trainedCount(shorter), 1);
+    expect(week.fullyTrained(shorter), isFalse);
+  });
+
   test('A/B tervnél az előző hét saját variánsa jön át', () {
     final plan = _plan([
       ['A-mell', 'A-hát'],

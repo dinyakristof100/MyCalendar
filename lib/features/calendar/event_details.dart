@@ -52,7 +52,16 @@ class _EventDetails extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              _CategoryChip(category: category, event: event),
+              _CategoryChip(
+                category: category,
+                onTap: () => showCategoryPicker(
+                  context,
+                  selectedId: category?.id,
+                  onPick: (id) => ref
+                      .read(categoriesProvider.notifier)
+                      .assign(event.id, id),
+                ),
+              ),
               const SizedBox(height: 20),
               _Detail(
                 icon: Icons.event_outlined,
@@ -158,10 +167,10 @@ class _EventDetails extends ConsumerWidget {
 /// A kategória kiválasztható „csipesze". Kategória nélkül felkínálja a
 /// hozzáadást; kategóriával a színt és a nevet mutatja, koppintásra átállítható.
 class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({required this.category, required this.event});
+  const _CategoryChip({required this.category, required this.onTap});
 
   final EventCategory? category;
-  final CalendarEvent event;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +182,7 @@ class _CategoryChip extends StatelessWidget {
       color: color.withValues(alpha: 0.14),
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
-        onTap: () => showCategoryPicker(context, event.id),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),

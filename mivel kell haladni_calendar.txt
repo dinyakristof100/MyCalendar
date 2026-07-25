@@ -3,12 +3,9 @@ powershell -ExecutionPolicy Bypass -File .\release.ps1
 (vagy: push a main-re — a CI magától buildel és kiad)
 ---------------------------------------------------------------------------------
 
-naptár eseményeket lehessen szerkeszteni is ne csak létrehozni. Illetve akkor már a teljes CRUD műveleteket implementálni kell hozzá.
 
-esemény létrehozásakor egy elavult, régi designú popup jelenik meg ahol ugye az esemény adatait lehet rögzíteni. Ez kéne újra alkotni és sokkal modernebb, szebb stílusúra átvariálni.
 
-Fejlesszük tovább a motivációs rendszert. Itt szabad kezet adok neked hogy hogyan kéne megoldani. Annyit kérek hogy írd le nekem mire gondoltál mielőtt implementálod és együtt megnézzük hogy az jó lesz-e.
 
-Hozz létre egy interaktív súgót az alkalamzáshoz hogy mi hogy működik benne. Ezen felül az első telepítéskor legyen egy user guide ami segít megtanulni a felhasználónak hogy mit hol talál és mit hogyan tud kezelni. Ez a user guide skippelhető, lépésenként átléphető legyen, valamint valahol legyen opció arra is hogy akár újra megtekinthető legyen.
 
-Továbbra is fenn áll az a hiba hogy mikor megnyitom az alkalmazást akkor nem töltődnek be a kártyák háttérszínei rendesen. Meg kell mozgatni az oldalakat kicsit hogy rendesne látszódjon minden elem. Pl Az eseményeknél az események kártya háttere nem jelenik meg amég nem nyomok a kijelzőre. Ugyan ez más oldalokon is jelen van más kártyáknál. Ezt kérlek javítsd ki.
+
+

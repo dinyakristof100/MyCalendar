@@ -34,6 +34,18 @@ void main() {
     expect(s.live(w4.add(const Duration(days: 1))), 0);
   });
 
+  test('a visszavont pipa leszedi az utolsó hetet a sorozatról', () {
+    // 3 hét zsinórban, az utolsó a w3 — a w3 egyik napját visszaállítják.
+    final s = Streak(weeks: 3, lastWeek: w3).revoke(w3);
+    expect(s.weeks, 2);
+    expect(s.lastWeek, w2);
+    // Az egyetlen hét visszavonásával nem marad sorozat.
+    expect(Streak(weeks: 1, lastWeek: w3).revoke(w3).weeks, 0);
+    expect(Streak(weeks: 1, lastWeek: w3).revoke(w3).lastWeek, isNull);
+    // Régebbi hétre nem nyúl.
+    expect(Streak(weeks: 3, lastWeek: w3).revoke(w2).weeks, 3);
+  });
+
   test('json oda-vissza megőrzi az állapotot', () {
     final s = Streak(weeks: 4, lastWeek: w3);
     final back = Streak.fromJson(s.toJson());

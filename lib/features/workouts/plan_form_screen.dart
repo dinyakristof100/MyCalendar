@@ -7,14 +7,19 @@ import 'workout_plans.dart';
 
 const _maxDays = 7;
 
-/// Új edzésterv felvitele: típus → heti edzésnapok száma → mi kerül az egyes
-/// napokra.
+/// Edzésterv felvitele vagy szerkesztése: típus → heti edzésnapok száma → mi
+/// kerül az egyes napokra.
+///
+/// [planId] megadva a meglévő tervet írja felül (azonos azonosítóval), egyébként
+/// újat hoz létre.
 ///
 /// ponytail: egyetlen görgethető űrlap, nem lépésenkénti varázsló. A sorrend
 /// ugyanaz, a kérdések egymás alatt látszanak, és nincs mögötte lépés-állapot,
 /// amit karban kellene tartani.
 class PlanFormScreen extends ConsumerStatefulWidget {
-  const PlanFormScreen({super.key});
+  const PlanFormScreen({this.planId, super.key});
+
+  final String? planId;
 
   @override
   ConsumerState<PlanFormScreen> createState() => _PlanFormScreenState();
@@ -32,6 +37,29 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
   final _content = List.generate(2, (_) => List.filled(_maxDays, ''));
 
   int get _weeks => _abWeeks ? 2 : 1;
+
+  /// A szerkesztett terv, vagy `null` új felvitelnél.
+  WorkoutPlan? get _editing {
+    for (final plan in ref.read(workoutPlansProvider).plans) {
+      if (plan.id == widget.planId) return plan;
+    }
+    return null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final plan = _editing;
+    if (plan == null) return;
+    _name.text = plan.name;
+    _abWeeks = plan.hasBWeek;
+    _days = plan.daysPerWeek;
+    for (var week = 0; week < plan.weeks.length; week++) {
+      for (var day = 0; day < plan.weeks[week].length; day++) {
+        _content[week][day] = plan.weeks[week][day];
+      }
+    }
+  }
 
   bool get _ready {
     if (_name.text.trim().isEmpty || _saving) return false;
@@ -51,29 +79,26 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
-    await ref
-        .read(workoutPlansProvider.notifier)
-        .add(
-          WorkoutPlan(
-            // Az azonosítónak csak egyedinek kell lennie a készüléken belül.
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
-            name: _name.text.trim(),
-            weeks: [
-              for (var week = 0; week < _weeks; week++)
-                [
-                  for (var day = 0; day < _days; day++)
-                    _content[week][day].trim(),
-                ],
-            ],
-          ),
-        );
+    final plan = WorkoutPlan(
+      // Az azonosítónak csak egyedinek kell lennie a készüléken belül.
+      id: widget.planId ?? DateTime.now().microsecondsSinceEpoch.toString(),
+      name: _name.text.trim(),
+      weeks: [
+        for (var week = 0; week < _weeks; week++)
+          [for (var day = 0; day < _days; day++) _content[week][day].trim()],
+      ],
+    );
+    final controller = ref.read(workoutPlansProvider.notifier);
+    await (widget.planId == null
+        ? controller.add(plan)
+        : controller.update(plan));
     if (mounted) context.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Új edzésterv',
+      title: widget.planId == null ? 'Új edzésterv' : 'Edzésterv szerkesztése',
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
         children: [
@@ -136,7 +161,11 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
                     dimension: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Edzésterv mentése'),
+                : Text(
+                    widget.planId == null
+                        ? 'Edzésterv mentése'
+                        : 'Módosítások mentése',
+                  ),
           ),
         ],
       ),

@@ -32,7 +32,10 @@ class CarriedDay {
   CarriedDay withOutcome(WorkoutOutcome? o) =>
       CarriedDay(content: content, outcome: o);
 
-  Map<String, Object?> toJson() => {'content': content, 'outcome': outcome?.name};
+  Map<String, Object?> toJson() => {
+    'content': content,
+    'outcome': outcome?.name,
+  };
 
   static CarriedDay fromJson(Map<String, Object?> json) => CarriedDay(
     content: json['content']! as String,
@@ -80,7 +83,8 @@ class WeekProgress {
       skipped.length + carried.where((c) => c.resolved && !c.done).length;
 
   /// Minden edzes leedzve — teljes, hibatlan het.
-  bool fullyTrained(WorkoutPlan plan) => trainedCount(plan) >= targetCount(plan);
+  bool fullyTrained(WorkoutPlan plan) =>
+      trainedCount(plan) >= targetCount(plan);
 
   /// A het le van zarva: minden nap vagy leedzve, vagy szandekosan kihagyva.
   /// Ilyenkor nincs mit athuzni es nincs mire tovabb kerdezni.
@@ -127,7 +131,25 @@ WeekProgress settleWeek(
   DateTime now,
 ) {
   final cur = weekStartOf(now);
-  if (stored.planId == plan.id && stored.weekStart == cur) return stored;
+  if (stored.planId == plan.id && stored.weekStart == cur) {
+    // A terv szerkeszthető: ha közben kevesebb lett a nap, a megszűnt slotok
+    // pipáit eldobjuk — különben többet számolna teljesítettnek, mint a hét
+    // célja, és a hét magától „teljesnek" látszana.
+    final days = plan.daysOfWeekAt(cur).length;
+    return WeekProgress(
+      planId: stored.planId,
+      weekStart: stored.weekStart,
+      done: {
+        for (final slot in stored.done)
+          if (slot < days) slot,
+      },
+      skipped: {
+        for (final slot in stored.skipped)
+          if (slot < days) slot,
+      },
+      carried: stored.carried,
+    );
+  }
 
   final prev = cur.subtract(const Duration(days: 7));
   final carried = <CarriedDay>[];
@@ -193,16 +215,24 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
     await saveSetting(_key, jsonEncode(week.toJson()));
   }
 
-  /// A terv [slot]. sajat napjat [outcome]-ra allitja a mai heten.
+  /// A terv [slot]. sajat napjat [outcome]-ra allitja a mai heten. `null`
+  /// outcome-mal a nap visszakerul nyitott allapotba (tevedes visszavonasa).
   Future<void> markBase(
     WorkoutPlan plan,
     int slot,
-    WorkoutOutcome outcome,
+    WorkoutOutcome? outcome,
   ) async {
     final cur = _current(plan);
     final done = {...cur.done}..remove(slot);
     final skipped = {...cur.skipped}..remove(slot);
-    (outcome == WorkoutOutcome.done ? done : skipped).add(slot);
+    switch (outcome) {
+      case WorkoutOutcome.done:
+        done.add(slot);
+      case WorkoutOutcome.skipped:
+        skipped.add(slot);
+      case null:
+        break;
+    }
     final week = WeekProgress(
       planId: cur.planId,
       weekStart: cur.weekStart,
@@ -211,14 +241,15 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
       carried: cur.carried,
     );
     await _persist(week);
-    await _recordIfComplete(plan, week);
+    await _syncStreak(plan, week);
   }
 
-  /// Az [index]. athozott napot [outcome]-ra allitja a mai heten.
+  /// Az [index]. athozott napot [outcome]-ra allitja a mai heten. `null`
+  /// outcome-mal a nap ujra nyitott lesz.
   Future<void> markCarried(
     WorkoutPlan plan,
     int index,
-    WorkoutOutcome outcome,
+    WorkoutOutcome? outcome,
   ) async {
     final cur = _current(plan);
     final week = WeekProgress(
@@ -232,14 +263,16 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
       ],
     );
     await _persist(week);
-    await _recordIfComplete(plan, week);
+    await _syncStreak(plan, week);
   }
 
-  /// Ha ezzel a pipaval teljes lett a het (minden betervezett es athozott edzes
-  /// leedzve), beszamitja a heti sorozatba. Skip nem szamit — csak a 100%.
-  Future<void> _recordIfComplete(WorkoutPlan plan, WeekProgress week) async {
-    if (week.fullyTrained(plan)) {
-      await ref.read(streakProvider.notifier).recordCompletion(week.weekStart!);
-    }
+  /// A heti sorozat igazitasa a het allapotahoz: teljes het (minden betervezett
+  /// es athozott edzes leedzve) beszamit, a visszavont pipa pedig levonja. Skip
+  /// nem szamit — csak a 100%.
+  Future<void> _syncStreak(WorkoutPlan plan, WeekProgress week) async {
+    final streak = ref.read(streakProvider.notifier);
+    await (week.fullyTrained(plan)
+        ? streak.recordCompletion(week.weekStart!)
+        : streak.revokeCompletion(week.weekStart!));
   }
 }

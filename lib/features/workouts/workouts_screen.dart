@@ -106,15 +106,51 @@ class _PlanView extends ConsumerWidget {
   final List<WorkoutPlan> plans;
   final WorkoutPlan plan;
 
+  /// Terv törlése megerősítéssel. A heti haladás a tervhez tartozik, ezért vele
+  /// együtt nullázódik — ezt előre meg is mondjuk.
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edzésterv törlése'),
+        content: Text(
+          '„${plan.name}" törlődik, a heti haladásával együtt. '
+          'A többi terved megmarad.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Mégsem'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Törlés'),
+          ),
+        ],
+      ),
+    );
+    if (yes ?? false) {
+      await ref.read(workoutPlansProvider.notifier).remove(plan.id);
+    }
+  }
+
   /// Hosszú nyomásra kérdez: görgetés közben könnyű véletlenül eltalálni egy
-  /// kártyát, ezért egy edzés lezárása mindig megerősítést kér. Három kimenet:
-  /// megvolt, szándékosan kihagyva (nem húzzuk át), vagy mégsem.
-  Future<WorkoutOutcome?> _ask(
+  /// kártyát, ezért egy edzés lezárása mindig megerősítést kér. Kimenetek:
+  /// megvolt, szándékosan kihagyva (nem húzzuk át), lezárt napnál visszaállítás
+  /// nyitottra, vagy mégsem.
+  ///
+  /// A `null` kimenet (nyitott nap) és a „mégsem" nem ugyanaz, ezért a válasz
+  /// egyelemű rekordba csomagolva jön: `null` = mégsem, `(null,)` = nyitottra.
+  Future<(WorkoutOutcome?,)?> _ask(
     BuildContext context,
     String label,
-    String content,
-  ) {
-    return showDialog<WorkoutOutcome>(
+    String content, {
+    required bool resolved,
+  }) {
+    return showDialog<(WorkoutOutcome?,)>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Mi lett ezzel a nappal?'),
@@ -124,12 +160,17 @@ class _PlanView extends ConsumerWidget {
             onPressed: () => Navigator.pop(context),
             child: const Text('Mégsem'),
           ),
+          if (resolved)
+            TextButton(
+              onPressed: () => Navigator.pop(context, (null,)),
+              child: const Text('Visszaállítás'),
+            ),
           TextButton(
-            onPressed: () => Navigator.pop(context, WorkoutOutcome.skipped),
+            onPressed: () => Navigator.pop(context, (WorkoutOutcome.skipped,)),
             child: const Text('Kihagyom'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, WorkoutOutcome.done),
+            onPressed: () => Navigator.pop(context, (WorkoutOutcome.done,)),
             child: const Text('Megvolt'),
           ),
         ],
@@ -138,16 +179,19 @@ class _PlanView extends ConsumerWidget {
   }
 
   /// Megkérdi a kimenetet, elmenti, majd visszajelez: leedzésre motiváció (a hét
-  /// utolsó edzése külön ünneplést kap), kihagyásra rövid nyugtázás.
+  /// utolsó edzése külön ünneplést kap), kihagyásra és visszaállításra rövid
+  /// nyugtázás.
   Future<void> _mark(
     BuildContext context,
     WidgetRef ref,
     String label,
-    String content,
-    Future<void> Function(WorkoutOutcome) apply,
-  ) async {
-    final outcome = await _ask(context, label, content);
-    if (outcome == null) return;
+    String content, {
+    required bool resolved,
+    required Future<void> Function(WorkoutOutcome?) apply,
+  }) async {
+    final answer = await _ask(context, label, content, resolved: resolved);
+    if (answer == null) return;
+    final outcome = answer.$1;
     await apply(outcome);
     if (!context.mounted) return;
 
@@ -155,14 +199,17 @@ class _PlanView extends ConsumerWidget {
     // értéket olvassuk, hogy a dicséret is kiírhassa.
     final now = DateTime.now();
     final week = ref.read(currentWeekProvider);
-    final message = outcome == WorkoutOutcome.done
-        ? praiseFor(
-            done: week.trainedCount(plan),
-            total: week.targetCount(plan),
-            day: now,
-            streak: ref.read(streakProvider).live(now),
-          )
-        : 'Kihagyva — ezt a napot nem hozzuk át a jövő hétre.';
+    final message = switch (outcome) {
+      WorkoutOutcome.done => praiseFor(
+        done: week.trainedCount(plan),
+        total: week.targetCount(plan),
+        day: now,
+        streak: ref.read(streakProvider).live(now),
+      ),
+      WorkoutOutcome.skipped =>
+        'Kihagyva — ezt a napot nem hozzuk át a jövő hétre.',
+      null => 'Visszaállítva — a nap újra nyitott.',
+    };
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
@@ -206,11 +253,27 @@ class _PlanView extends ConsumerWidget {
         ],
         Appear(
           index: slot++,
-          child: Text(
-            plan.name,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  plan.name,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              PopupMenuButton<bool>(
+                tooltip: 'A terv műveletei',
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: true, child: Text('Terv szerkesztése')),
+                  PopupMenuItem(value: false, child: Text('Terv törlése')),
+                ],
+                onSelected: (edit) => edit
+                    ? context.push('/workouts/edit/${plan.id}')
+                    : _confirmDelete(context, ref),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 4),
@@ -254,17 +317,18 @@ class _PlanView extends ConsumerWidget {
                 content: plan.weeks[w][day],
                 done: w == thisWeek && week.done.contains(day),
                 skipped: w == thisWeek && week.skipped.contains(day),
-                // Csak az aktuális hét pipálható, és csak ami még nyitott.
-                onLongPress:
-                    w == thisWeek &&
-                        !week.done.contains(day) &&
-                        !week.skipped.contains(day)
+                // Csak az aktuális hét pipálható — a lezárt nap is, hogy a
+                // félrenyomott pipa visszavonható legyen.
+                onLongPress: w == thisWeek
                     ? () => _mark(
                         context,
                         ref,
                         '${day + 1}. nap',
                         plan.weeks[w][day],
-                        (outcome) => ref
+                        resolved:
+                            week.done.contains(day) ||
+                            week.skipped.contains(day),
+                        apply: (outcome) => ref
                             .read(workoutProgressProvider.notifier)
                             .markBase(plan, day, outcome),
                       )
@@ -282,17 +346,16 @@ class _PlanView extends ConsumerWidget {
                 content: week.carried[i].content,
                 done: week.carried[i].done,
                 skipped: week.carried[i].resolved && !week.carried[i].done,
-                onLongPress: week.carried[i].resolved
-                    ? null
-                    : () => _mark(
-                        context,
-                        ref,
-                        'Áthozott nap',
-                        week.carried[i].content,
-                        (outcome) => ref
-                            .read(workoutProgressProvider.notifier)
-                            .markCarried(plan, i, outcome),
-                      ),
+                onLongPress: () => _mark(
+                  context,
+                  ref,
+                  'Áthozott nap',
+                  week.carried[i].content,
+                  resolved: week.carried[i].resolved,
+                  apply: (outcome) => ref
+                      .read(workoutProgressProvider.notifier)
+                      .markCarried(plan, i, outcome),
+                ),
               ),
             ),
         ],

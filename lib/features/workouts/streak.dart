@@ -36,6 +36,16 @@ class Streak {
     );
   }
 
+  /// Egy korábban beszámított hét visszavonása (a felhasználó visszavont egy
+  /// pipát, így a hét már nem teljes). Csak az utoljára beszámított hetet lehet
+  /// visszavonni — régebbire nyúlni nincs mihez, azt a [live] úgyis lezárja.
+  Streak revoke(DateTime weekStart) {
+    if (lastWeek != weekStart) return this;
+    return weeks > 1
+        ? Streak(weeks: weeks - 1, lastWeek: _prevWeek(weekStart))
+        : const Streak();
+  }
+
   /// A ténylegesen élő sorozat [now]-kor. Ha a legutóbb beszámított hét nem a
   /// mai vagy a közvetlen előző hét, akkor egy teljes hét kimaradt → 0.
   int live(DateTime now) {
@@ -74,6 +84,16 @@ class StreakController extends Notifier<Streak> {
   /// semmi (ugyanaz a hét újra), nem ír.
   Future<void> recordCompletion(DateTime weekStart) async {
     final next = state.advance(weekStart);
+    if (identical(next, state)) return;
+    state = next;
+    await saveSetting(_key, jsonEncode(next.toJson()));
+  }
+
+  /// A [weekStart] hét visszavonása: ha ez a hét volt az utolsó beszámított, de
+  /// egy nap pipáját visszavonták, a hét már nem teljes — lekerül a sorozatból.
+  /// Más hétre nem nyúl.
+  Future<void> revokeCompletion(DateTime weekStart) async {
+    final next = state.revoke(weekStart);
     if (identical(next, state)) return;
     state = next;
     await saveSetting(_key, jsonEncode(next.toJson()));

@@ -15,11 +15,12 @@ const permissionDeniedCode = 'PERMISSION_DENIED';
 DateTime clampEnd(DateTime start, DateTime end) =>
     end.isAfter(start) ? end : start.add(const Duration(hours: 1));
 
-/// Új esemény beírása az eszköz naptárába. Több napon átnyúlhat.
+/// Új esemény beírása az eszköz naptárába. Több napon átnyúlhat. Az új esemény
+/// azonosítójával tér vissza — erre kötjük pl. a kategória-hozzárendelést.
 ///
 /// A hívó dolga frissíteni a listát — az `upcomingEventsProvider`
 /// érvénytelenítése az emlékeztetőket is újraütemezi.
-Future<void> createEvent({
+Future<String?> createEvent({
   required String title,
   required DateTime start,
   required DateTime end,

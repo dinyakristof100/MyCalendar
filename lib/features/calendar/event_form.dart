@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'calendar_service.dart';
+import 'event_categories.dart';
 import 'event_groups.dart';
 
 /// Esemény felvitele vagy szerkesztése. `true`-val záródik, ha az esemény be is
@@ -21,21 +23,25 @@ Future<bool?> showEventForm(
   builder: (_) => _EventForm(initialDay: initialDay, editing: editing),
 );
 
-class _EventForm extends StatefulWidget {
+class _EventForm extends ConsumerStatefulWidget {
   const _EventForm({this.initialDay, this.editing});
 
   final DateTime? initialDay;
   final CalendarEvent? editing;
 
   @override
-  State<_EventForm> createState() => _EventFormState();
+  ConsumerState<_EventForm> createState() => _EventFormState();
 }
 
-class _EventFormState extends State<_EventForm> {
+class _EventFormState extends ConsumerState<_EventForm> {
   final _title = TextEditingController();
 
   late DateTime _start;
   late DateTime _end;
+
+  /// A kiválasztott kategória — új eseménynél még nincs mihez rendelni, ezért
+  /// az űrlapon várakozik, és a mentés köti rá a létrejött eseményre.
+  String? _categoryId;
   bool _saving = false;
 
   bool get _isEdit => widget.editing != null;
@@ -46,6 +52,7 @@ class _EventFormState extends State<_EventForm> {
     final editing = widget.editing;
     if (editing != null) {
       _title.text = editing.title;
+      _categoryId = ref.read(categoriesProvider).of(editing.id)?.id;
       _start = editing.at;
       // Egész naposnak nincs vége a modellben; a form időpontos, ezért +1 óra.
       // ponytail: az egész napos esemény szerkesztve időpontossá válik — a form
@@ -150,6 +157,10 @@ class _EventFormState extends State<_EventForm> {
     setState(() => _saving = true);
     try {
       final editing = widget.editing;
+      final categories = ref.read(categoriesProvider.notifier);
+      // Az űrlap nyitva léte alatt a kategória törölhető is — a már nem létezőt
+      // nem rendeljük hozzá.
+      final categoryId = ref.read(categoriesProvider).byId(_categoryId)?.id;
       if (editing != null) {
         await updateEvent(
           id: editing.id,
@@ -157,8 +168,13 @@ class _EventFormState extends State<_EventForm> {
           start: _start,
           end: _end,
         );
+        await categories.assign(editing.id, categoryId);
       } else {
-        await createEvent(title: title, start: _start, end: _end);
+        final id = await createEvent(title: title, start: _start, end: _end);
+        // Kategória nélkül nincs mit menteni; azonosító nélkül nincs mire.
+        if (id != null && categoryId != null) {
+          await categories.assign(id, categoryId);
+        }
       }
       if (mounted) Navigator.pop(context, true);
     } on PlatformException catch (e) {
@@ -179,25 +195,45 @@ class _EventFormState extends State<_EventForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final ready = _title.text.trim().isNotEmpty && !_saving;
+    final category = ref.watch(categoriesProvider).byId(_categoryId);
 
     return Padding(
       // A billentyűzet fölé emeli a lapot.
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                _isEdit ? 'Esemény szerkesztése' : 'Új esemény',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      _isEdit ? Icons.edit_calendar_outlined : Icons.event,
+                      color: scheme.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      _isEdit ? 'Esemény szerkesztése' : 'Új esemény',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               TextField(
                 controller: _title,
                 autofocus: !_isEdit,
@@ -206,37 +242,128 @@ class _EventFormState extends State<_EventForm> {
                 onSubmitted: (_) => _save(),
                 // A mentés gomb a cím ürességétől függ.
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Cím',
-                  border: OutlineInputBorder(),
+                  hintText: 'Mi kerüljön a naptárba?',
+                  prefixIcon: const Icon(Icons.title_rounded),
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
-              _WhenRow(
-                label: 'Kezdés',
-                value: _start,
-                onDate: () => _pickDate(end: false),
-                onTime: () => _pickTime(end: false),
+              // Kategória már itt, a felvitelnél — nem kell utólag megnyitni az
+              // eseményt hozzá.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _PickerChip(
+                  icon: category == null ? Icons.label_outline : Icons.label,
+                  label: category?.name ?? 'Kategória',
+                  color: category?.color,
+                  onTap: () => showCategoryPicker(
+                    context,
+                    selectedId: _categoryId,
+                    onPick: (id) => setState(() => _categoryId = id),
+                  ),
+                ),
               ),
-              const SizedBox(height: 8),
-              _WhenRow(
-                label: 'Vége',
-                value: _end,
-                onDate: () => _pickDate(end: true),
-                onTime: () => _pickTime(end: true),
+              const SizedBox(height: 16),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                  child: Column(
+                    children: [
+                      _WhenRow(
+                        label: 'Kezdés',
+                        value: _start,
+                        onDate: () => _pickDate(end: false),
+                        onTime: () => _pickTime(end: false),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Divider(
+                                height: 1,
+                                color: scheme.outlineVariant.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.hourglass_bottom_rounded,
+                                    size: 14,
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    _durationLabel(_end.difference(_start)),
+                                    style: theme.textTheme.labelMedium
+                                        ?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: Divider(
+                                height: 1,
+                                color: scheme.outlineVariant.withValues(
+                                  alpha: 0.6,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _WhenRow(
+                        label: 'Vége',
+                        value: _end,
+                        onDate: () => _pickDate(end: true),
+                        onTime: () => _pickTime(end: true),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
-              FilledButton(
+              FilledButton.icon(
                 onPressed: ready ? _save : null,
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
-                child: _saving
+                icon: _saving
                     ? const SizedBox.square(
-                        dimension: 20,
+                        dimension: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(_isEdit ? 'Módosítások mentése' : 'Mentés a naptárba'),
+                    : Icon(_isEdit ? Icons.check_rounded : Icons.add_rounded),
+                label: Text(
+                  _isEdit ? 'Módosítások mentése' : 'Mentés a naptárba',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
@@ -246,7 +373,20 @@ class _EventFormState extends State<_EventForm> {
   }
 }
 
-/// Egy időpont: dátum és óra, saját gombbal.
+/// Emberi hossz-címke: „1 óra 30 perc", „45 perc", több napra „2 nap 3 óra".
+String _durationLabel(Duration d) {
+  final days = d.inDays;
+  final hours = d.inHours % 24;
+  final minutes = d.inMinutes % 60;
+  final parts = [
+    if (days > 0) '$days nap',
+    if (hours > 0) '$hours óra',
+    if (minutes > 0) '$minutes perc',
+  ];
+  return parts.isEmpty ? '0 perc' : parts.join(' ');
+}
+
+/// Egy időpont sora: fent a címke, alatta a dátum és az óra tonális chipként.
 class _WhenRow extends StatelessWidget {
   const _WhenRow({
     required this.label,
@@ -263,30 +403,88 @@ class _WhenRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 58,
-          child: Text(
-            label,
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+        Text(
+          label,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
           ),
         ),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: onDate,
-            icon: const Icon(Icons.event_outlined, size: 18),
-            label: Text(
-              dayLabel(value, today: DateTime.now()),
-              overflow: TextOverflow.ellipsis,
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _PickerChip(
+                icon: Icons.event_outlined,
+                label: dayLabel(value, today: DateTime.now()),
+                onTap: onDate,
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            _PickerChip(
+              icon: Icons.schedule_outlined,
+              label: hhmm(value),
+              onTap: onTime,
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        OutlinedButton(onPressed: onTime, child: Text(hhmm(value))),
       ],
+    );
+  }
+}
+
+/// Koppintható tonális pötty: ikon + felirat, az akcentszín halvány hátterén.
+class _PickerChip extends StatelessWidget {
+  const _PickerChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  /// A chip színe — megadva a kategória saját színét viseli, egyébként az
+  /// akcentszínt.
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = color ?? theme.colorScheme.primary;
+    return Material(
+      color: accent.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: accent),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

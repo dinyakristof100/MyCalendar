@@ -6,6 +6,7 @@ import 'package:my_calendar/app.dart';
 import 'package:my_calendar/features/auth/auth_controller.dart';
 import 'package:my_calendar/features/calendar/calendar_service.dart';
 import 'package:my_calendar/features/calendar/event_groups.dart';
+import 'package:my_calendar/features/help/guide.dart';
 import 'package:my_calendar/features/workouts/motivation.dart';
 import 'package:my_calendar/core/prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,7 +36,9 @@ void main() {
   // csinálja, memóriában.
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    SharedPreferences.setMockInitialValues({});
+    // A bemutatót „látottnak" jelöljük: első indításkor magától felugrana, és
+    // minden más teszt elől eltakarná a képernyőt. A saját tesztje törli.
+    SharedPreferences.setMockInitialValues({'guideSeen': 'true'});
     await initPrefs();
     // Az értesítés-plugin natív oldala nincs a tesztben: a pipálás
     // újraütemezné az esti kérdéseket, ezt nyeljük el.
@@ -258,10 +261,20 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
 
-    // A kipipált nap nem nyitja meg újra a kérdést.
+    // A kipipált nap visszaállítható: a kérdés újranyílik, és ott már van
+    // visszavonás — utána a nap megint nyitott.
     await tester.longPress(find.text('mell, tricepsz'));
     await tester.pumpAndSettle();
-    expect(find.text('Mi lett ezzel a nappal?'), findsNothing);
+    expect(find.text('Mi lett ezzel a nappal?'), findsOneWidget);
+    await tester.tap(find.text('Visszaállítás'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check_circle), findsNothing);
+    expect(
+      find.text('Sima heti terv · ezen a héten 0/2 megvan'),
+      findsOneWidget,
+    );
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('teljes hét sorozatot indít és jelvényt mutat', (tester) async {
@@ -296,6 +309,57 @@ void main() {
     // A lejáró SnackBar időzítőjét lepörgetjük.
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('első indításkor felugrik a bemutató, és kihagyható', (
+    tester,
+  ) async {
+    await prefs.remove('guideSeen');
+    addTearDown(() => prefs.setString('guideSeen', 'true'));
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    expect(find.text(guideTopics.first.title), findsOneWidget);
+    expect(find.text('1 / ${guideTopics.length}'), findsOneWidget);
+
+    // Lépésenként tovább.
+    await tester.tap(find.text('Tovább'));
+    await tester.pumpAndSettle();
+    expect(find.text(guideTopics[1].title), findsOneWidget);
+
+    // Kihagyva bezárul, és többé nem jön elő magától.
+    await tester.tap(find.text('Kihagyom'));
+    await tester.pumpAndSettle();
+    expect(find.text(guideTopics[1].title), findsNothing);
+    expect(guideSeen, isTrue);
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Más'))));
+    await tester.pumpAndSettle();
+    expect(find.text(guideTopics.first.title), findsNothing);
+  });
+
+  testWidgets('a súgó a beállításokból nyílik és újraindítja a bemutatót', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Beállítások');
+
+    // A súgó a lista alján van — előbb odagörgetünk.
+    final entry = find.text('Súgó és útmutató');
+    await tester.scrollUntilVisible(entry, 400);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    // Minden téma szakaszként ott van, lenyitva a leírásával.
+    expect(find.text(guideTopics.first.title), findsOneWidget);
+    await tester.tap(find.text(guideTopics.first.title));
+    await tester.pumpAndSettle();
+    expect(find.text(guideTopics.first.body), findsOneWidget);
+
+    // A bemutató innen újranézhető.
+    await tester.tap(find.text('Bemutató újranézése'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 / ${guideTopics.length}'), findsOneWidget);
   });
 
   testWidgets('töltés közben nem dob a loginra', (tester) async {
