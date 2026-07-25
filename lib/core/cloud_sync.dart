@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/auth/auth_controller.dart';
+import '../features/calendar/calendar_service.dart';
 import '../features/calendar/event_categories.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/workouts/streak.dart';
@@ -20,6 +21,9 @@ const syncedKeys = <String>[
   'themeMode', // színkészlet
   'eventCategories', // naptárkategóriák (név + szín)
   'eventCategoryAssignments', // esemény -> kategória
+  // Elrejtett eszköz-naptárak. A kulcs fiók+név, nem naptár-id: az id
+  // eszközspecifikus, a fiók+név páros viszont a másik telefonon is ugyanaz.
+  'hiddenCalendars',
   'workoutPlans', // edzéstervek
   'activeWorkoutPlan', // az aktív terv
   'workoutProgress', // a hét teljesített napjai
@@ -109,6 +113,9 @@ final cloudSyncProvider = Provider<void>((ref) {
       pullFromCloud().then((_) {
         ref.invalidate(appStyleProvider);
         ref.invalidate(categoriesProvider);
+        // A naptárszűrőt az esemény-providerek figyelik: elég ezt frissíteni,
+        // a lista és a naptárnézet magától újratölt.
+        ref.invalidate(hiddenCalendarsProvider);
         ref.invalidate(workoutPlansProvider);
         ref.invalidate(workoutProgressProvider);
         ref.invalidate(carryOverProvider);

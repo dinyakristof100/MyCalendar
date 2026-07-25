@@ -6,6 +6,8 @@ import '../../core/app_scaffold.dart';
 import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
 import '../auth/auth_controller.dart';
+import '../calendar/calendar_service.dart';
+import '../calendar/event_categories.dart';
 import '../workouts/workout_progress.dart';
 
 const _key = 'themeMode';
@@ -172,6 +174,9 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const Divider(height: 24),
+          const _SectionTitle('Naptárak'),
+          const _CalendarFilter(),
+          const Divider(height: 24),
           const _SectionTitle('Edzés'),
           SwitchListTile(
             secondary: const Icon(Icons.event_repeat),
@@ -212,6 +217,51 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// Melyik eszköz-naptár eseményei látszanak az appban.
+///
+/// A kikapcsolt naptárak a listából, a naptárnézetből és az emlékeztetőkből is
+/// kiesnek — az esemény-providerek a szűrőt figyelik, ezért a kapcsoló azonnal
+/// hat, külön frissítés nélkül.
+class _CalendarFilter extends ConsumerWidget {
+  const _CalendarFilter();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final hidden = ref.watch(hiddenCalendarsProvider);
+
+    return switch (ref.watch(deviceCalendarsProvider)) {
+      AsyncData(:final value) when value.isEmpty => const ListTile(
+        leading: Icon(Icons.event_busy_outlined),
+        title: Text('Nincs naptár a készüléken'),
+      ),
+      AsyncData(:final value) => Column(
+        children: [
+          for (final calendar in value)
+            CheckboxListTile(
+              secondary: CategoryDot(color: calendar.color, size: 18),
+              title: Text(calendar.name),
+              subtitle: calendar.account == calendar.name
+                  ? null
+                  : Text(calendar.account),
+              value: !hidden.contains(calendar.key),
+              onChanged: (on) => ref
+                  .read(hiddenCalendarsProvider.notifier)
+                  .setVisible(calendar, on ?? true),
+            ),
+        ],
+      ),
+      // Engedély nélkül nincs mit felsorolni — az Események lap úgyis kéri.
+      AsyncError() => ListTile(
+        leading: Icon(Icons.lock_outline, color: theme.colorScheme.error),
+        title: const Text('Nem sikerült beolvasni a naptárakat'),
+        subtitle: const Text('Adj naptár-engedélyt, majd gyere vissza ide.'),
+      ),
+      _ => const ListTile(title: Text('Naptárak betöltése…')),
+    };
   }
 }
 

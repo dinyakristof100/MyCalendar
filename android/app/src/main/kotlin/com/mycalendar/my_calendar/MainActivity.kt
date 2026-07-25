@@ -40,8 +40,9 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "upcomingEvents" -> handleUpcomingEvents(call.argument<Int>("days") ?: 14, result)
+                    "upcomingEvents" -> handleUpcomingEvents(call, result)
                     "eventsInRange" -> handleEventsInRange(call, result)
+                    "calendars" -> handleCalendars(result)
                     "createEvent" -> handleCreateEvent(call, result)
                     "updateEvent" -> handleUpdateEvent(call, result)
                     "deleteEvent" -> handleDeleteEvent(call, result)
@@ -58,11 +59,18 @@ class MainActivity : FlutterActivity() {
      */
     private var permissionAsked = false
 
-    private fun handleUpcomingEvents(days: Int, result: MethodChannel.Result) {
+    private fun handleUpcomingEvents(call: MethodCall, result: MethodChannel.Result) {
         if (!ensureReadPermission(result)) return
         try {
+            val days = call.argument<Int>("days") ?: 14
             val begin = System.currentTimeMillis()
-            result.success(queryRange(begin, begin + days * 24L * 60L * 60L * 1000L))
+            result.success(
+                contentResolver.queryInstances(
+                    begin,
+                    begin + days * 24L * 60L * 60L * 1000L,
+                    call.calendarIds(),
+                ),
+            )
         } catch (e: Exception) {
             result.error("QUERY_FAILED", e.message, null)
         }
@@ -74,11 +82,30 @@ class MainActivity : FlutterActivity() {
         if (!ensureReadPermission(result)) return
         try {
             result.success(
-                queryRange(
+                contentResolver.queryInstances(
                     call.argument<Number>("begin")!!.toLong(),
                     call.argument<Number>("end")!!.toLong(),
+                    call.calendarIds(),
                 ),
             )
+        } catch (e: Exception) {
+            result.error("QUERY_FAILED", e.message, null)
+        }
+    }
+
+    /**
+     * A naptárszűrő opcionális argumentuma. Hiányzó vagy üres lista = minden
+     * naptár, vagyis a szűrő bevezetése előtti viselkedés. A milliszekundumokhoz
+     * hasonlóan itt is `Number`-ként vesszük át: a codec kis id-t `Int`-ként hoz.
+     */
+    private fun MethodCall.calendarIds(): List<Long>? =
+        argument<List<Number>>("calendarIds")?.map { it.toLong() }
+
+    /** Az eszköz naptárai — ebből épül a beállítások naptárszűrője. */
+    private fun handleCalendars(result: MethodChannel.Result) {
+        if (!ensureReadPermission(result)) return
+        try {
+            result.success(contentResolver.queryCalendars())
         } catch (e: Exception) {
             result.error("QUERY_FAILED", e.message, null)
         }
@@ -112,51 +139,93 @@ class MainActivity : FlutterActivity() {
         return false
     }
 
+    /**
+     * A cím, az időpont, az egész napos jelleg és az ismétlődés mezői — a
+     * beszúrás és a módosítás ugyanezt írja. Az egész napos jelleget mindkét
+     * irányban ki kell írni: enélkül a szerkesztés elvenné egy meglévő egész
+     * napos esemény ALL_DAY jelzőjét.
+     *
+     * Egész naposnál a Dart oldal a nap UTC éjfelét küldi kezdésnek és a
+     * következő nap UTC éjfelét végnek (az Android félig nyílt intervallumot
+     * vár), az időzóna pedig kötelezően UTC — helyi zónával a naptár átcsúsztatná
+     * a szomszédos napra.
+     *
+     * Ismétlődőnél a naptár DTEND helyett DURATION-t vár (és a kettő együtt
+     * érvénytelen adat): a hosszt a kapott intervallumból számoljuk, egész
+     * naposra a napalapú `P1D` kell. A DTEND-et kifejezetten nullázzuk, mert a
+     * módosítást a provider a sor meglévő mezőivel együtt ellenőrzi.
+     */
+    private fun eventValues(call: MethodCall): ContentValues {
+        val allDay = call.argument<Boolean>("allDay") == true
+        // A milliszekundum nem fér `Int`-be, a codec ezért `Long`-ként hozza —
+        // de a `Number` biztosan illeszkedik mindkettőre.
+        val begin = call.argument<Number>("begin")!!.toLong()
+        val end = call.argument<Number>("end")!!.toLong()
+        val rrule = call.argument<String>("rrule")
+        return ContentValues().apply {
+            put(CalendarContract.Events.TITLE, call.argument<String>("title")!!)
+            put(CalendarContract.Events.DTSTART, begin)
+            if (rrule == null) {
+                put(CalendarContract.Events.DTEND, end)
+            } else {
+                putNull(CalendarContract.Events.DTEND)
+                put(CalendarContract.Events.RRULE, rrule)
+                put(
+                    CalendarContract.Events.DURATION,
+                    if (allDay) "P1D" else "PT${(end - begin) / 1000}S",
+                )
+            }
+            put(CalendarContract.Events.ALL_DAY, if (allDay) 1 else 0)
+            // Kötelező mező: enélkül a beszúrás kivételt dob.
+            put(
+                CalendarContract.Events.EVENT_TIMEZONE,
+                if (allDay) "UTC" else TimeZone.getDefault().id,
+            )
+        }
+    }
+
     private fun handleCreateEvent(call: MethodCall, result: MethodChannel.Result) {
         if (!ensureWritePermission(result)) return
         try {
-            // A milliszekundum nem fér `Int`-be, a codec ezért `Long`-ként
-            // hozza — de a `Number` biztosan illeszkedik mindkettőre.
-            result.success(
-                insertEvent(
-                    call.argument<String>("title")!!,
-                    call.argument<Number>("begin")!!.toLong(),
-                    call.argument<Number>("end")!!.toLong(),
-                ),
-            )
+            val id = insertEvent(eventValues(call))
+            TodayWidget.refresh(this)
+            result.success(id)
         } catch (e: Exception) {
             result.error("INSERT_FAILED", e.message, null)
         }
     }
 
     /**
-     * Meglévő esemény címének és időpontjának módosítása. Csak ezt a három
-     * mezőt írja, a többit (leírás, hely) érintetlenül hagyja.
+     * Meglévő esemény címének, időpontjának és egész napos jellegének
+     * módosítása. Csak ezeket írja, a többit (leírás, hely) érintetlenül hagyja.
      *
-     * ponytail: az `id` az esemény sora, nem egy ismétlődés-előfordulásé — az
-     * app nem hoz létre ismétlődő eseményt. Egy szinkronizált ismétlődő sorozat
-     * szerkesztése az egész sorozatra hatna; ha ez kell, jöhet az
-     * `Instances`-alapú kivétel-kezelés.
+     * ponytail: az `id` az esemény sora, nem egy ismétlődés-előfordulásé, ezért
+     * ismétlődő eseménynél a módosítás az egész sorozatra hat — a Dart oldal
+     * ezért figyelmezteti a felhasználót. Az „csak ez az előfordulás" ág helye:
+     * EXDATE hozzáfűzése a sorhoz (az előfordulás kezdetével), plusz egy új,
+     * önálló esemény a módosított adatokkal.
      */
     private fun handleUpdateEvent(call: MethodCall, result: MethodChannel.Result) {
         if (!ensureWritePermission(result)) return
         try {
             val id = call.argument<String>("id")!!.toLong()
-            val values = ContentValues().apply {
-                put(CalendarContract.Events.TITLE, call.argument<String>("title")!!)
-                put(CalendarContract.Events.DTSTART, call.argument<Number>("begin")!!.toLong())
-                put(CalendarContract.Events.DTEND, call.argument<Number>("end")!!.toLong())
-            }
+            val values = eventValues(call)
             val uri = ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id)
             if (contentResolver.update(uri, values, null, null) == 0) {
                 error("A naptár nem találta a módosítandó eseményt.")
             }
+            TodayWidget.refresh(this)
             result.success(null)
         } catch (e: Exception) {
             result.error("UPDATE_FAILED", e.message, null)
         }
     }
 
+    /**
+     * ponytail: a sor törlése az egész sorozatot viszi. Egy előfordulás
+     * törléséhez EXDATE-et kellene fűzni a sor meglévő EXDATE-jéhez — a Dart
+     * oldal addig csak az „összes"-t ajánlja fel, figyelmeztetéssel.
+     */
     private fun handleDeleteEvent(call: MethodCall, result: MethodChannel.Result) {
         if (!ensureWritePermission(result)) return
         try {
@@ -165,6 +234,7 @@ class MainActivity : FlutterActivity() {
             if (contentResolver.delete(uri, null, null) == 0) {
                 error("A naptár nem találta a törlendő eseményt.")
             }
+            TodayWidget.refresh(this)
             result.success(null)
         } catch (e: Exception) {
             result.error("DELETE_FAILED", e.message, null)
@@ -178,16 +248,9 @@ class MainActivity : FlutterActivity() {
      * készüléken egy fiók van. Naptárválasztó akkor kell, ha valakinek több
      * írható naptára van, és számít a különbség.
      */
-    private fun insertEvent(title: String, begin: Long, end: Long): String {
+    private fun insertEvent(values: ContentValues): String {
         val calendarId = writableCalendarId() ?: error("Nincs írható naptár a készüléken.")
-        val values = ContentValues().apply {
-            put(CalendarContract.Events.CALENDAR_ID, calendarId)
-            put(CalendarContract.Events.TITLE, title)
-            put(CalendarContract.Events.DTSTART, begin)
-            put(CalendarContract.Events.DTEND, end)
-            // Kötelező mező: enélkül a beszúrás kivételt dob.
-            put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-        }
+        values.put(CalendarContract.Events.CALENDAR_ID, calendarId)
         val uri = contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
             ?: error("A naptár elutasította az eseményt.")
         return ContentUris.parseId(uri).toString()
@@ -229,52 +292,4 @@ class MainActivity : FlutterActivity() {
         arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR),
         PERMISSION_REQUEST,
     )
-
-    /**
-     * Az `Instances` tábla az ismétlődő eseményeket már előfordulásokra bontva
-     * adja vissza a kért időablakra — pont, ami az emlékeztetőkhöz kell.
-     *
-     * Egész napos eseménynél a BEGIN érték **UTC éjfél**, nem helyi idő. A
-     * Dart oldal ezt tudja, és nem vált időzónát rajta.
-     */
-    private fun queryRange(begin: Long, end: Long): List<Map<String, Any?>> {
-        val uri = CalendarContract.Instances.CONTENT_URI.buildUpon().let {
-            ContentUris.appendId(it, begin)
-            ContentUris.appendId(it, end)
-            it.build()
-        }
-        val projection = arrayOf(
-            CalendarContract.Instances.EVENT_ID,
-            CalendarContract.Instances.TITLE,
-            CalendarContract.Instances.BEGIN,
-            CalendarContract.Instances.ALL_DAY,
-            CalendarContract.Instances.END,
-            CalendarContract.Instances.DESCRIPTION,
-            CalendarContract.Instances.EVENT_LOCATION,
-        )
-
-        val events = mutableListOf<Map<String, Any?>>()
-        contentResolver.query(
-            uri,
-            projection,
-            null,
-            null,
-            "${CalendarContract.Instances.BEGIN} ASC",
-        )?.use { cursor ->
-            while (cursor.moveToNext()) {
-                events.add(
-                    mapOf(
-                        "id" to cursor.getLong(0).toString(),
-                        "title" to cursor.getString(1),
-                        "begin" to cursor.getLong(2),
-                        "allDay" to (cursor.getInt(3) == 1),
-                        "end" to cursor.getLong(4),
-                        "description" to cursor.getString(5),
-                        "location" to cursor.getString(6),
-                    ),
-                )
-            }
-        }
-        return events
-    }
 }
