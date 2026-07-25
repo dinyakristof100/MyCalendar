@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A widget rendszerszintű leírója. Az updatePeriodMillis alsó korlátja a
+     rendszernél fél óra — ennél sűrűbben a rendszer úgysem ébresztené. A friss
+     adat ezért nem ettől jön: az app minden esemény-írás után maga frissíti a
+     widgetet (TodayWidget.refresh). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_today"
+    android:minHeight="110dp"
+    android:minWidth="250dp"
+    android:previewLayout="@layout/widget_today"
+    android:resizeMode="none"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

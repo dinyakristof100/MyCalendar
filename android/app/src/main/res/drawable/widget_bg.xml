@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A widget háttere: lekerekített lap. Az Android 12+ a widgetet amúgy is
+     levágja a rendszer sugarával, ez a régebbi kiadásokra ad formát. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/widget_bg" />
+    <corners android:radius="24dp" />
+</shape>

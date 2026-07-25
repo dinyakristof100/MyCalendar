@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A kezdőképernyő-widget színei. A widget nem a Flutter-témából él (a Dart
+     nem fut, amikor a rendszer kirajzolja), ezért itt kell rögzíteni őket. A
+     sötét változat a values-night mappában van, azt a rendszer váltja. -->
+<resources>
+    <color name="widget_bg">#FFFFFFFF</color>
+    <color name="widget_text">#FF1B1B1F</color>
+    <color name="widget_muted">#FF5F5F6B</color>
+    <!-- Ugyanaz az indigó, mint az app ikonjában és az alap színkészletében. -->
+    <color name="widget_accent">#FF3F51B5</color>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A widget sötét témás színei — lásd values/colors.xml. -->
+<resources>
+    <color name="widget_bg">#F21C1B20</color>
+    <color name="widget_text">#FFE6E1E9</color>
+    <color name="widget_muted">#FFB0AAB8</color>
+    <color name="widget_accent">#FFB3C0FF</color>
+</resources>
