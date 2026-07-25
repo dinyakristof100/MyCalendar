@@ -46,15 +46,19 @@ int _dayIndex(DateTime day) =>
 
 /// A pipálás utáni üzenet. A hét utolsó edzése külön ünneplést kap; a többinél
 /// a nap ÉS az aznapi sorszám is forgat, hogy egy napon belül se ismétlődjön.
+/// Ha teljes lett a hét és van élő [streak] (legalább 2), a sorozatot is kiírja.
 String praiseFor({
   required int done,
   required int total,
   required DateTime day,
+  int streak = 0,
 }) {
   final index = _dayIndex(day);
-  return done >= total
-      ? weekCompleteMessages[index % weekCompleteMessages.length]
-      : praiseMessages[(index + done) % praiseMessages.length];
+  if (done < total) {
+    return praiseMessages[(index + done) % praiseMessages.length];
+  }
+  final base = weekCompleteMessages[index % weekCompleteMessages.length];
+  return streak >= 2 ? '$base 🔥 $streak hét zsinórban!' : base;
 }
 
 /// A napi gondolkodtató páros: mit veszítesz kihagyva, mit nyersz megcsinálva.
@@ -67,9 +71,11 @@ String praiseFor({
   );
 }
 
-/// Az esti kérdés alá szánt egysoros: páros napon a nyereség, páratlanon a
-/// veszteség — így az értesítés se mindig ugyanabból az irányból szól.
-String nudgeLineFor(DateTime day) {
+/// Az esti kérdés alá szánt egysoros. Ha van megvédhető [streak] (legalább 2
+/// hét), a sorozat elvesztése az erősebb ösztönző — azt írjuk. Különben páros
+/// napon a nyereség, páratlanon a veszteség, hogy ne mindig ugyanonnan szóljon.
+String nudgeLineFor(DateTime day, {int streak = 0}) {
+  if (streak >= 2) return 'Ne szakítsd meg a $streak hetes sorozatod!';
   final reflection = reflectionFor(day);
   return _dayIndex(day).isEven ? reflection.gain : reflection.cost;
 }

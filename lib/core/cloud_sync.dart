@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/auth_controller.dart';
 import '../features/calendar/event_categories.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/workouts/streak.dart';
 import '../features/workouts/workout_plans.dart';
 import '../features/workouts/workout_progress.dart';
 import 'prefs.dart';
@@ -23,6 +24,7 @@ const syncedKeys = <String>[
   'activeWorkoutPlan', // az aktív terv
   'workoutProgress', // a hét teljesített napjai
   'carryOverWorkouts', // le nem edzett napok átcsúsztatása
+  'workoutStreak', // heti sorozat (hány hét zsinórban)
 ];
 
 /// A `lastActiveAt` minden felhőírásnál a szerveridőre frissül. Automatikus
@@ -110,6 +112,7 @@ final cloudSyncProvider = Provider<void>((ref) {
         ref.invalidate(workoutPlansProvider);
         ref.invalidate(workoutProgressProvider);
         ref.invalidate(carryOverProvider);
+        ref.invalidate(streakProvider);
       }),
     );
   }, fireImmediately: true);

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
+import 'streak.dart';
 import 'workout_plans.dart';
 
 const _key = 'workoutProgress';
@@ -193,36 +194,52 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
   }
 
   /// A terv [slot]. sajat napjat [outcome]-ra allitja a mai heten.
-  Future<void> markBase(WorkoutPlan plan, int slot, WorkoutOutcome outcome) {
+  Future<void> markBase(
+    WorkoutPlan plan,
+    int slot,
+    WorkoutOutcome outcome,
+  ) async {
     final cur = _current(plan);
     final done = {...cur.done}..remove(slot);
     final skipped = {...cur.skipped}..remove(slot);
     (outcome == WorkoutOutcome.done ? done : skipped).add(slot);
-    return _persist(
-      WeekProgress(
-        planId: cur.planId,
-        weekStart: cur.weekStart,
-        done: done,
-        skipped: skipped,
-        carried: cur.carried,
-      ),
+    final week = WeekProgress(
+      planId: cur.planId,
+      weekStart: cur.weekStart,
+      done: done,
+      skipped: skipped,
+      carried: cur.carried,
     );
+    await _persist(week);
+    await _recordIfComplete(plan, week);
   }
 
   /// Az [index]. athozott napot [outcome]-ra allitja a mai heten.
-  Future<void> markCarried(WorkoutPlan plan, int index, WorkoutOutcome outcome) {
+  Future<void> markCarried(
+    WorkoutPlan plan,
+    int index,
+    WorkoutOutcome outcome,
+  ) async {
     final cur = _current(plan);
-    return _persist(
-      WeekProgress(
-        planId: cur.planId,
-        weekStart: cur.weekStart,
-        done: cur.done,
-        skipped: cur.skipped,
-        carried: [
-          for (var i = 0; i < cur.carried.length; i++)
-            i == index ? cur.carried[i].withOutcome(outcome) : cur.carried[i],
-        ],
-      ),
+    final week = WeekProgress(
+      planId: cur.planId,
+      weekStart: cur.weekStart,
+      done: cur.done,
+      skipped: cur.skipped,
+      carried: [
+        for (var i = 0; i < cur.carried.length; i++)
+          i == index ? cur.carried[i].withOutcome(outcome) : cur.carried[i],
+      ],
     );
+    await _persist(week);
+    await _recordIfComplete(plan, week);
+  }
+
+  /// Ha ezzel a pipaval teljes lett a het (minden betervezett es athozott edzes
+  /// leedzve), beszamitja a heti sorozatba. Skip nem szamit — csak a 100%.
+  Future<void> _recordIfComplete(WorkoutPlan plan, WeekProgress week) async {
+    if (week.fullyTrained(plan)) {
+      await ref.read(streakProvider.notifier).recordCompletion(week.weekStart!);
+    }
   }
 }

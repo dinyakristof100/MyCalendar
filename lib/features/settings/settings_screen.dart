@@ -188,9 +188,9 @@ class SettingsScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
             child: Text(
               'A naptáradat a készülékről olvassuk. A beállításaid, '
-              'kategóriáid és edzésterveid a Google-fiókodhoz kötve a felhőbe '
-              'is mentődnek, hogy új telefonon visszaálljanak. Adataid törlését '
-              'a fejlesztőnél kérheted.',
+              'kategóriáid, edzésterveid és -haladásod (a sorozatoddal együtt) a '
+              'Google-fiókodhoz kötve a felhőbe is mentődnek, hogy új telefonon '
+              'visszaálljanak. Adataid törlését a fejlesztőnél kérheted.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
                 height: 1.4,

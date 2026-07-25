@@ -6,6 +6,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/notifications.dart';
 import 'motivation.dart';
+import 'streak.dart';
 import 'workout_plans.dart';
 import 'workout_progress.dart';
 
@@ -18,6 +19,9 @@ final workoutNudgeSyncProvider = Provider<void>((ref) {
     // A hét „lezárva", ha minden nap leedzve VAGY szándékosan kihagyva — a
     // skippelt napra nincs mit kérdezni, az áthozottra viszont van.
     weekResolved: plan != null && ref.watch(currentWeekProvider).resolvedAll(plan),
+    // A mai élő sorozat: van-e mit „ne szakíts meg". A sorozat változása is
+    // újraütemez, így az értesítés szövege követi.
+    streak: ref.watch(streakProvider).live(DateTime.now()),
   );
 });
 
@@ -54,6 +58,7 @@ const _details = NotificationDetails(
 Future<void> syncWorkoutNudges({
   required WorkoutPlan? plan,
   required bool weekResolved,
+  int streak = 0,
   DateTime? now,
 }) async {
   final from = now ?? DateTime.now();
@@ -84,7 +89,10 @@ Future<void> syncWorkoutNudges({
       title: 'Megvolt a mai edzés?',
       // A napi gondolkodtató egysoros: ugyanazt mondja, amit aznap az
       // edzésnapló kártyája — determinisztikus, ezért előre ütemezhető.
-      body: '${plan.name} — ${nudgeLineFor(date)}',
+      // ponytail: a sorozatot a MAI héthez számoljuk, a jövő heti napokra is ez
+      // kerül; hét fordulóján kissé elavulhat, de minden app-nyitás/pipa
+      // újraütemez, így hamar helyreáll.
+      body: '${plan.name} — ${nudgeLineFor(date, streak: streak)}',
       // A koppintás ide visz: az edzésnaplóban lehet pipálni.
       payload: '/workouts',
       scheduledDate: tz.TZDateTime.from(at, tz.UTC),

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/app_scaffold.dart';
 import '../../core/ui.dart';
 import 'motivation.dart';
+import 'streak.dart';
 import 'workout_plans.dart';
 import 'workout_progress.dart';
 
@@ -150,12 +151,16 @@ class _PlanView extends ConsumerWidget {
     await apply(outcome);
     if (!context.mounted) return;
 
+    // A sorozatot az `apply` már frissítette (ha teljes lett a hét) — a friss
+    // értéket olvassuk, hogy a dicséret is kiírhassa.
+    final now = DateTime.now();
     final week = ref.read(currentWeekProvider);
     final message = outcome == WorkoutOutcome.done
         ? praiseFor(
             done: week.trainedCount(plan),
             total: week.targetCount(plan),
-            day: DateTime.now(),
+            day: now,
+            streak: ref.read(streakProvider).live(now),
           )
         : 'Kihagyva — ezt a napot nem hozzuk át a jövő hétre.';
     ScaffoldMessenger.of(context).showSnackBar(
@@ -176,6 +181,7 @@ class _PlanView extends ConsumerWidget {
     final target = week.targetCount(plan);
     final trained = week.trainedCount(plan);
     final skipped = week.skippedCount(plan);
+    final streak = ref.watch(streakProvider).live(now);
     var slot = 0;
 
     return ListView(
@@ -218,6 +224,10 @@ class _PlanView extends ConsumerWidget {
                 : theme.colorScheme.onSurfaceVariant,
           ),
         ),
+        if (streak > 0) ...[
+          const SizedBox(height: 10),
+          _StreakPill(weeks: streak),
+        ],
         const SizedBox(height: 14),
         Appear(
           index: slot++,
@@ -225,6 +235,7 @@ class _PlanView extends ConsumerWidget {
             fullyTrained: week.fullyTrained(plan),
             resolved: week.resolvedAll(plan),
             skipped: skipped,
+            streak: streak,
           ),
         ),
         for (var w = 0; w < plan.weeks.length; w++) ...[
@@ -298,11 +309,13 @@ class _MotivationCard extends StatelessWidget {
     required this.fullyTrained,
     required this.resolved,
     required this.skipped,
+    required this.streak,
   });
 
   final bool fullyTrained;
   final bool resolved;
   final int skipped;
+  final int streak;
 
   @override
   Widget build(BuildContext context) {
@@ -312,7 +325,9 @@ class _MotivationCard extends StatelessWidget {
       return _Banner(
         color: _done,
         icon: Icons.emoji_events_outlined,
-        text: 'A heti terv kész — minden edzés megvan. Jöhet a pihenés!',
+        text: streak >= 2
+            ? 'A heti terv kész — 🔥 $streak hét zsinórban! Jöhet a pihenés.'
+            : 'A heti terv kész — minden edzés megvan. Jöhet a pihenés!',
       );
     }
 
@@ -393,6 +408,45 @@ class _Banner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A heti sorozat jelvénye a fejlécben — csak akkor látszik, ha van élő sorozat.
+class _StreakPill extends StatelessWidget {
+  const _StreakPill({required this.weeks});
+
+  final int weeks;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.primary;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🔥', style: TextStyle(fontSize: 14)),
+            const SizedBox(width: 6),
+            Text(
+              '$weeks hét zsinórban',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -264,6 +264,40 @@ void main() {
     expect(find.text('Mi lett ezzel a nappal?'), findsNothing);
   });
 
+  testWidgets('teljes hét sorozatot indít és jelvényt mutat', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1080, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    // Egynapos terv, hogy egyetlen pipával teljes legyen a hét.
+    await prefs.setString(
+      'workoutPlans',
+      '[{"id":"s1","name":"Napi","weeks":[["teljes test"]]}]',
+    );
+    await prefs.setString('activeWorkoutPlan', 's1');
+    addTearDown(() async {
+      await prefs.remove('workoutPlans');
+      await prefs.remove('activeWorkoutPlan');
+      await prefs.remove('workoutProgress');
+      await prefs.remove('workoutStreak');
+    });
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Edzésnapló');
+    // Kezdéskor nincs sorozat, nincs jelvény.
+    expect(find.textContaining('hét zsinórban'), findsNothing);
+
+    await tester.longPress(find.text('teljes test'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Megvolt'));
+    await tester.pumpAndSettle();
+
+    // A hét teljes lett → 1 hetes sorozat indul, a jelvény megjelenik.
+    expect(find.text('1 hét zsinórban'), findsOneWidget);
+    // A lejáró SnackBar időzítőjét lepörgetjük.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('töltés közben nem dob a loginra', (tester) async {
     await tester.pumpWidget(_appWith(const AsyncValue.loading()));
     await tester.pump();
