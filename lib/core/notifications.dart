@@ -9,14 +9,48 @@ final notifications = FlutterLocalNotificationsPlugin();
 /// törli a másikat — egy `cancelAll` mindig levinné mindkettőt.
 const workoutIdBase = 1000000;
 
+/// Az értesítés-gombok azonosítói. Egy helyen: az ütemezés és a feldolgozás
+/// két külön fájlban van, string-literálként elcsúsznának.
+const workoutDoneAction = 'workout_done';
+const snoozeAction = 'snooze10';
+
+/// Amit egy értesítés-válaszból csinálni kell.
+enum NotificationAction { open, workoutDone, snooze }
+
+/// Az [actionId] + [payload] párból eldönti a műveletet.
+///
+/// Ismeretlen vagy hiányzó azonosító = sima koppintás: csak navigálunk. Payload
+/// nélkül a „+10 perc"-nek nem lenne mit újraütemeznie, az is nyitásra esik
+/// vissza.
+NotificationAction notificationActionFor(String? actionId, String? payload) =>
+    switch (actionId) {
+      workoutDoneAction => NotificationAction.workoutDone,
+      snoozeAction when payload != null && payload.isNotEmpty =>
+        NotificationAction.snooze,
+      _ => NotificationAction.open,
+    };
+
 /// A `main()`-ből hívandó: időzóna-adatbázis, plugin, és az Android 13+
 /// értesítési engedély.
 ///
 /// [onTap] az értesítés payloadjában küldött útvonalat kapja. Hidegindításnál
 /// a callback még nem élt, amikor a koppintás történt — ezért a plugin
 /// indulási adatait külön is megnézzük.
+///
+/// [onWorkoutDone] a „Megvolt ✓", [onSnooze] a „+10 perc" gomb műveletét
+/// végzi el — a hívó köti be, hogy ez a fájl ne függjön se a Riverpodtól, se a
+/// naptártól.
+///
+/// ponytail: az akciók `showsUserInterface: true`-val futnak, tehát mindig a fő
+/// isolate-ban, ahol él a router, a Riverpod és a prefs. Plafon: az app előjön
+/// az akcióra. Háttérben futó gombhoz
+/// `onDidReceiveBackgroundNotificationResponse` + `@pragma('vm:entry-point')`
+/// kellene, saját prefs-olvasással és írási úttal, és a providereket akkor sem
+/// tudná invalidálni.
 Future<void> initNotifications({
   required void Function(String route) onTap,
+  required void Function() onWorkoutDone,
+  required void Function(int id, String payload) onSnooze,
 }) async {
   tzdata.initializeTimeZones();
   await notifications.initialize(
@@ -29,8 +63,19 @@ Future<void> initNotifications({
       iOS: DarwinInitializationSettings(),
     ),
     onDidReceiveNotificationResponse: (response) {
-      final route = response.payload;
-      if (route != null && route.isNotEmpty) onTap(route);
+      final payload = response.payload;
+      switch (notificationActionFor(response.actionId, payload)) {
+        case NotificationAction.workoutDone:
+          onWorkoutDone();
+        case NotificationAction.snooze:
+          if (response.id != null) onSnooze(response.id!, payload!);
+        case NotificationAction.open:
+          break;
+      }
+      // Az akció után is navigálunk: a „Megvolt" eredménye (pipa, sorozat) így
+      // rögtön látszik, és ha a mai nap nem volt egyértelmű, ott lehet kézzel
+      // pipálni.
+      if (payload != null && payload.isNotEmpty) onTap(payload);
     },
   );
   await notifications

@@ -75,6 +75,12 @@ class _EventDetails extends ConsumerWidget {
                   (final start, final finish) => '$start – ${hhmm(finish!)}',
                 },
               ),
+              if (event.recurring)
+                const _Detail(
+                  icon: Icons.repeat_rounded,
+                  text: 'Ismétlődő esemény — a szerkesztés és a törlés a '
+                      'sorozat minden előfordulására érvényes',
+                ),
               if (event.location case final location?)
                 _Detail(icon: Icons.place_outlined, text: location),
               if (event.description case final description?)
@@ -116,12 +122,22 @@ class _EventDetails extends ConsumerWidget {
     if (context.mounted) Navigator.pop(context);
   }
 
+  /// ponytail: ismétlődőnél csak a teljes sorozat törlése megy — az `id` a
+  /// sorozat sora. Az „csak ez az előfordulás" ág egy EXDATE hozzáfűzése volna
+  /// a sorhoz; addig a párbeszéd megmondja, mi fog történni.
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Esemény törlése'),
-        content: Text('Biztosan törlöd? „${event.title}"'),
+        title: Text(
+          event.recurring ? 'Sorozat törlése' : 'Esemény törlése',
+        ),
+        content: Text(
+          event.recurring
+              ? 'A(z) „${event.title}" minden előfordulása törlődik, nem csak '
+                    'ez az egy. Biztosan törlöd?'
+              : 'Biztosan törlöd? „${event.title}"',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),

@@ -30,15 +30,28 @@ flutter pub get
 
 # 3) Build. A Gradle-or (app/build.gradle.kts) a legelejen ellenorzi a registrantot,
 #    es hangos, egyertelmu hibaval all le, ha barmi megis kiesett volna.
-Write-Host "==> flutter build apk --debug..." -ForegroundColor Cyan
-flutter build apk --debug
-
-# 4) Telepites a Galaxy S23-ra (adb id a project-status memoriabol).
+#
+#    A versionCode-ot a telefonon levo verzio fole visszuk. A CI-release 1000+run_number-t
+#    ad (release-apk.yml), a pubspec viszont csak +3 -- e nelkul minden helyi build
+#    INSTALL_FAILED_VERSION_DOWNGRADE-del all le, amig release van fent a keszuleken.
 #    Az adb-t nem tesszuk PATH-fuggove -- az Android SDK platform-tools-bol vesszuk.
 $adb = (Get-Command adb -ErrorAction SilentlyContinue).Source
 if (-not $adb) { $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" }
+$found = & $adb -s RFCW903FSHW shell dumpsys package com.mycalendar.my_calendar |
+  Select-String 'versionCode=(\d+)' | Select-Object -First 1
+# ponytail: a keszuleken talalt szam +1, nem sajat verziosema. Ha nincs telefon vagy
+# nincs fent az app, marad a pubspec erteke. Ceiling: ha tobbszor buildelsz helyben,
+# mint ahany CI-futas van, a debug szama elszalad a release elol -- olyankor a
+# weboldalrol jovo release csak eltavolitas utan megy fel.
+$buildArgs = if ($found) { @("--build-number", ([int]$found.Matches[0].Groups[1].Value + 1)) } else { @() }
+
+Write-Host "==> flutter build apk --debug $buildArgs..." -ForegroundColor Cyan
+flutter build apk --debug @buildArgs
+
+# 4) Telepites a Galaxy S23-ra (adb id a project-status memoriabol).
 Write-Host "==> Telepites a telefonra..." -ForegroundColor Cyan
 & $adb -s RFCW903FSHW install -r "$root\build\app\outputs\flutter-apk\app-debug.apk"
+if ($LASTEXITCODE -ne 0) { throw "Telepites SIKERTELEN (a telefon nincs csatlakoztatva vagy nincs USB-debug?). Az APK elkeszult, de NEM kerult fel a keszulekre." }
 
 Write-Host ""
 Write-Host "KESZ -- az app telepitve." -ForegroundColor Green

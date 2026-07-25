@@ -266,6 +266,36 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
     await _syncStreak(plan, week);
   }
 
+  /// Az esti ertesites „Megvolt ✓" gombja: a het egyetlen nyitott napjat
+  /// pipalja le, a rendes uton (`markBase`/`markCarried`), hogy a sorozat is
+  /// beszamitson.
+  ///
+  /// ponytail: csak akkor pipal, ha pontosan egy nyitott nap maradt. A terv
+  /// napjai nincsenek a het napjaihoz kotve (1./2. nap, nem hetfo/szerda), tobb
+  /// nyitottnal nem tudni, melyik a mai — olyankor nem tippel, a hivo megnyitja
+  /// az edzesnaplot.
+  Future<void> markTodayDone() async {
+    final plan = ref.read(workoutPlansProvider).active;
+    if (plan == null) return;
+    final cur = _current(plan);
+    final openBase = [
+      for (
+        var slot = 0;
+        slot < plan.daysOfWeekAt(cur.weekStart!).length;
+        slot++
+      )
+        if (!cur.done.contains(slot) && !cur.skipped.contains(slot)) slot,
+    ];
+    final openCarried = [
+      for (var i = 0; i < cur.carried.length; i++)
+        if (!cur.carried[i].resolved) i,
+    ];
+    if (openBase.length + openCarried.length != 1) return;
+    await (openBase.isNotEmpty
+        ? markBase(plan, openBase.single, WorkoutOutcome.done)
+        : markCarried(plan, openCarried.single, WorkoutOutcome.done));
+  }
+
   /// A heti sorozat igazitasa a het allapotahoz: teljes het (minden betervezett
   /// es athozott edzes leedzve) beszamit, a visszavont pipa pedig levonja. Skip
   /// nem szamit — csak a 100%.

@@ -15,24 +15,36 @@ const _key = 'workoutStreak';
 DateTime _prevWeek(DateTime weekStart) =>
     DateTime(weekStart.year, weekStart.month, weekStart.day - 7);
 
-/// A heti sorozat tárolt állapota: hány hét zsinórban, és melyik hét (hétfője)
-/// volt az utolsó beszámított. Csak nő (hét teljesítésekor); a megszakadást nem
-/// tároljuk 0-ként, hanem a [live] számolja ki olvasáskor a mai héthez képest —
-/// így egy hét kihagyása nem igényel „takarító" írást.
+/// Ennyi hetet őrzünk meg a hőtérképhez. A 12 pötty duplája: van mit
+/// visszagörgetni, de a JSON nem hízik évek alatt.
+const _keepWeeks = 26;
+
+/// A heti sorozat tárolt állapota: hány hét zsinórban, melyik hét (hétfője)
+/// volt az utolsó beszámított, és mely hetek teljesültek ([completedWeeks],
+/// hétfő-éjfelekkel — ebből rajzolódik a hőtérkép). A sorozatszámláló csak nő
+/// (hét teljesítésekor); a megszakadást nem tároljuk 0-ként, hanem a [live]
+/// számolja ki olvasáskor a mai héthez képest — így egy hét kihagyása nem
+/// igényel „takarító" írást.
 class Streak {
-  const Streak({this.weeks = 0, this.lastWeek});
+  const Streak({this.weeks = 0, this.lastWeek, this.completedWeeks = const {}});
 
   final int weeks;
   final DateTime? lastWeek;
+  final Set<DateTime> completedWeeks;
 
   /// Egy teljesített hetet ([weekStart] hétfővel) beszámít. Idempotens: ha ez a
   /// hét már benne van, ugyanezt adja vissza. Ha az előző hét volt az utolsó
   /// beszámított, folytatja a sorozatot; különben újat kezd 1-től.
   Streak advance(DateTime weekStart) {
-    if (lastWeek == weekStart) return this;
+    if (lastWeek == weekStart && completedWeeks.contains(weekStart)) {
+      return this;
+    }
     return Streak(
-      weeks: lastWeek == _prevWeek(weekStart) ? weeks + 1 : 1,
+      weeks: lastWeek == weekStart
+          ? weeks // régi mentés: a hét megvolt, csak a halmazból hiányzott
+          : (lastWeek == _prevWeek(weekStart) ? weeks + 1 : 1),
       lastWeek: weekStart,
+      completedWeeks: {...completedWeeks, weekStart},
     );
   }
 
@@ -41,9 +53,25 @@ class Streak {
   /// visszavonni — régebbire nyúlni nincs mihez, azt a [live] úgyis lezárja.
   Streak revoke(DateTime weekStart) {
     if (lastWeek != weekStart) return this;
+    final rest = {...completedWeeks}..remove(weekStart);
     return weeks > 1
-        ? Streak(weeks: weeks - 1, lastWeek: _prevWeek(weekStart))
-        : const Streak();
+        ? Streak(
+            weeks: weeks - 1,
+            lastWeek: _prevWeek(weekStart),
+            completedWeeks: rest,
+          )
+        : Streak(completedWeeks: rest);
+  }
+
+  /// A mai héttől visszafelé [count] hét: teljesült-e. A `[0]` mindig a mai hét.
+  List<bool> lastWeeks(DateTime now, int count) {
+    var week = weekStartOf(now);
+    final out = <bool>[];
+    for (var i = 0; i < count; i++) {
+      out.add(completedWeeks.contains(week));
+      week = _prevWeek(week);
+    }
+    return out;
   }
 
   /// A ténylegesen élő sorozat [now]-kor. Ha a legutóbb beszámított hét nem a
@@ -55,14 +83,30 @@ class Streak {
     return (last == thisWeek || last == _prevWeek(thisWeek)) ? weeks : 0;
   }
 
-  Map<String, Object?> toJson() => {
-    'weeks': weeks,
-    'lastWeek': lastWeek?.toIso8601String(),
-  };
+  /// Íráskor vágunk: csak a legutóbbi [_keepWeeks] hét megy a JSON-ba.
+  Map<String, Object?> toJson() {
+    final sorted = completedWeeks.toList()..sort();
+    return {
+      'weeks': weeks,
+      'lastWeek': lastWeek?.toIso8601String(),
+      'completedWeeks': [
+        for (final w in sorted.sublist(
+          (sorted.length - _keepWeeks).clamp(0, sorted.length),
+        ))
+          w.toIso8601String(),
+      ],
+    };
+  }
 
+  /// A `completedWeeks` hiánya üres halmaz — a mező előtti mentések (és a régi
+  /// felhő-dokumentumok) így is beolvasnak, csak a hőtérképük indul üresen.
   static Streak fromJson(Map<String, Object?> json) => Streak(
     weeks: (json['weeks'] as int?) ?? 0,
     lastWeek: DateTime.tryParse(json['lastWeek'] as String? ?? ''),
+    completedWeeks: {
+      for (final w in (json['completedWeeks'] as List?) ?? const [])
+        ?DateTime.tryParse(w as String? ?? ''),
+    },
   );
 }
 

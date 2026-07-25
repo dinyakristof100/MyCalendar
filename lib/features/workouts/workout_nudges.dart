@@ -18,7 +18,8 @@ final workoutNudgeSyncProvider = Provider<void>((ref) {
     plan: plan,
     // A hét „lezárva", ha minden nap leedzve VAGY szándékosan kihagyva — a
     // skippelt napra nincs mit kérdezni, az áthozottra viszont van.
-    weekResolved: plan != null && ref.watch(currentWeekProvider).resolvedAll(plan),
+    weekResolved:
+        plan != null && ref.watch(currentWeekProvider).resolvedAll(plan),
     // A mai élő sorozat: van-e mit „ne szakíts meg". A sorozat változása is
     // újraütemez, így az értesítés szövege követi.
     streak: ref.watch(streakProvider).live(DateTime.now()),
@@ -46,6 +47,15 @@ const _details = NotificationDetails(
     // Este szól, amikor gyakran áll a Ne zavarjanak: emlékeztetőként a mód
     // átengedi, így az órára is kimegy.
     category: AndroidNotificationCategory.reminder,
+    // Az esti kérdésre egy gombbal lehet válaszolni. A feldolgozás a
+    // `initNotifications`-ben van.
+    actions: [
+      AndroidNotificationAction(
+        workoutDoneAction,
+        'Megvolt ✓',
+        showsUserInterface: true,
+      ),
+    ],
   ),
   iOS: DarwinNotificationDetails(),
 );

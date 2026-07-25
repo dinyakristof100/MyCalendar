@@ -68,7 +68,7 @@ void main() {
     await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Események'), findsOneWidget);
-    expect(find.text('Szabad a két hét'), findsOneWidget);
+    expect(find.text('Szabad két hét'), findsOneWidget);
     for (final label in ['Események', 'Naptár', 'Edzésnapló', 'Beállítások']) {
       expect(
         find.descendant(

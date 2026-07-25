@@ -43,4 +43,45 @@ void main() {
       'délután',
     ]);
   });
+
+  group('nowMarkerIndex', () {
+    test('üres nap: a vonal a végén (nulladik) helyen áll', () {
+      expect(nowMarkerIndex(const [], _today), 0);
+    });
+
+    test('minden esemény elmúlt: a nap végére kerül', () {
+      final events = [
+        _event(DateTime(2026, 7, 22, 8)),
+        _event(DateTime(2026, 7, 22, 9)),
+      ];
+      expect(nowMarkerIndex(events, _today), 2);
+    });
+
+    test('minden esemény hátravan: a lista elejére kerül', () {
+      final events = [
+        _event(DateTime(2026, 7, 22, 14)),
+        _event(DateTime(2026, 7, 22, 18)),
+      ];
+      expect(nowMarkerIndex(events, _today), 0);
+    });
+
+    test('az egész naposakat átlépi', () {
+      final events = [
+        _event(DateTime(2026, 7, 22), allDay: true),
+        _event(DateTime(2026, 7, 22, 8)),
+        _event(DateTime(2026, 7, 22, 14)),
+      ];
+      expect(nowMarkerIndex(events, _today), 2);
+    });
+
+    test('csak egész napos események: a végén', () {
+      final events = [_event(DateTime(2026, 7, 22), allDay: true)];
+      expect(nowMarkerIndex(events, _today), 1);
+    });
+
+    test('a pont most kezdődő esemény már mögötte van', () {
+      final events = [_event(_today), _event(DateTime(2026, 7, 22, 11))];
+      expect(nowMarkerIndex(events, _today), 1);
+    });
+  });
 }

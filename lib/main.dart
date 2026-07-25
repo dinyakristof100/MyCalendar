@@ -7,7 +7,9 @@ import 'app.dart';
 import 'core/cloud_sync.dart';
 import 'core/notifications.dart';
 import 'core/prefs.dart';
+import 'features/calendar/reminders.dart';
 import 'features/workouts/workout_nudges.dart';
+import 'features/workouts/workout_progress.dart';
 import 'firebase_options.dart';
 import 'router.dart';
 
@@ -30,6 +32,9 @@ Future<void> main() async {
     final container = ProviderContainer();
     await initNotifications(
       onTap: (route) => container.read(routerProvider).go(route),
+      onWorkoutDone: () =>
+          container.read(workoutProgressProvider.notifier).markTodayDone(),
+      onSnooze: snoozeReminder,
     );
     // Egyszeri beolvasás: innentől a terv és a pipák változását követve
     // újraütemezi az esti kérdéseket.

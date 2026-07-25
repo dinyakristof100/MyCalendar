@@ -128,8 +128,11 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
               ),
               AsyncData(:final value) when value.isEmpty => const _Placeholder(
                 icon: Icons.event_available_outlined,
-                title: 'Szabad a két hét',
-                detail: 'Nincs egyetlen esemény sem a következő 14 napban.',
+                title: 'Szabad két hét',
+                detail:
+                    'Ez a lista 14 napra előre néz, és nincs benne semmi.\n'
+                    'Ha mégis kell ide valami, a jobb alsó + gombbal '
+                    'felveheted.',
               ),
               AsyncData(:final value) => _EventList(events: value),
             },
@@ -165,14 +168,19 @@ class _EventList extends StatelessWidget {
           child: _DayHeader(day: day),
         ),
       );
-      for (final event in day.events) {
+      // A mai napban jelöljük, hol tart az idő: a vonal a következő esemény
+      // előtt áll. Nem mozog magától — a resume-ra úgyis újraépül a lista.
+      final marker = day.isToday ? nowMarkerIndex(day.events, today) : -1;
+      for (var i = 0; i < day.events.length; i++) {
+        if (i == marker) children.add(const _NowLine());
         children.add(
           Appear(
             index: slot++,
-            child: _EventCard(event: event),
+            child: _EventCard(event: day.events[i]),
           ),
         );
       }
+      if (marker == day.events.length) children.add(const _NowLine());
     }
     // A lebegő gomb alatt is legyen olvasható az utolsó kártya.
     children.add(const SizedBox(height: 96));
@@ -180,6 +188,29 @@ class _EventList extends StatelessWidget {
     // ponytail: a lista egyben épül fel, nem lustán. 14 nap eseményei néhány
     // tucat sor — ha egyszer hosszabb időszakot mutatunk, jöhet a builder.
     return SliverList(delegate: SliverChildListDelegate(children));
+  }
+}
+
+/// A „most" vonal: hol tart a nap a mai lista két eseménye között.
+class _NowLine extends StatelessWidget {
+  const _NowLine();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(_gutter, 7, _gutter, 7),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          Expanded(child: Container(height: 2, color: color)),
+        ],
+      ),
+    );
   }
 }
 

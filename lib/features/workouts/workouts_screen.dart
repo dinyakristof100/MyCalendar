@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -192,6 +193,8 @@ class _PlanView extends ConsumerWidget {
     final answer = await _ask(context, label, content, resolved: resolved);
     if (answer == null) return;
     final outcome = answer.$1;
+    // Egyetlen rezgés az egész appban: a leedzett nap az, ami megérdemli.
+    if (outcome == WorkoutOutcome.done) HapticFeedback.mediumImpact();
     await apply(outcome);
     if (!context.mounted) return;
 
@@ -228,7 +231,8 @@ class _PlanView extends ConsumerWidget {
     final target = week.targetCount(plan);
     final trained = week.trainedCount(plan);
     final skipped = week.skippedCount(plan);
-    final streak = ref.watch(streakProvider).live(now);
+    final streakState = ref.watch(streakProvider);
+    final streak = streakState.live(now);
     var slot = 0;
 
     return ListView(
@@ -290,6 +294,10 @@ class _PlanView extends ConsumerWidget {
         if (streak > 0) ...[
           const SizedBox(height: 10),
           _StreakPill(weeks: streak),
+        ],
+        if (streakState.completedWeeks.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _WeekDots(done: streakState.lastWeeks(now, 12), thisWeek: now),
         ],
         const SizedBox(height: 14),
         Appear(
@@ -513,6 +521,53 @@ class _StreakPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Az utolsó hetek hőtérképe: egy pötty hetente, teljesült = akcentszín. A
+/// [done] a mai héttel kezdve visszafelé jön, a sor jobb széle a mai hét.
+class _WeekDots extends StatelessWidget {
+  const _WeekDots({required this.done, required this.thisWeek});
+
+  final List<bool> done;
+  final DateTime thisWeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final monday = weekStartOf(thisWeek);
+    return Row(
+      children: [
+        for (var i = done.length - 1; i >= 0; i--)
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Tooltip(
+              message: _label(
+                DateTime(monday.year, monday.month, monday.day - 7 * i),
+                done[i],
+              ),
+              child: Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: done[i]
+                      ? scheme.primary
+                      : scheme.outlineVariant.withValues(alpha: 0.5),
+                  border: i == 0
+                      ? Border.all(color: scheme.onSurfaceVariant, width: 1.5)
+                      : null,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _label(DateTime monday, bool done) =>
+      '${monday.month.toString().padLeft(2, '0')}. '
+      '${monday.day.toString().padLeft(2, '0')}. heti — '
+      '${done ? 'megvolt' : 'kimaradt'}';
 }
 
 class _ReflectionLine extends StatelessWidget {

@@ -57,6 +57,19 @@ String dayLabel(DateTime day, {required DateTime today}) {
   return '${_months[day.month - 1]} ${day.day}., ${_weekdays[day.weekday - 1]}';
 }
 
+/// Hányadik elem ELŐTT álljon a „most" vonal egy nap (rendezett) listájában.
+///
+/// Az első még hátralévő esemény indexe; ha már mind elmúlt, a lista hossza —
+/// a vonal ilyenkor a nap végére kerül. Az egész naposak elöl állnak és nincs
+/// értelmes idejük, ezért őket a vonal mindig maga mögött hagyja.
+int nowMarkerIndex(List<CalendarEvent> dayEvents, DateTime now) {
+  for (var i = 0; i < dayEvents.length; i++) {
+    if (dayEvents[i].allDay) continue;
+    if (dayEvents[i].at.isAfter(now)) return i;
+  }
+  return dayEvents.length;
+}
+
 /// Napokra bontja az eseményeket, a napokat időrendben adja vissza.
 ///
 /// Egy napon belül az egész naposak állnak elöl: az egész napra vonatkoznak,

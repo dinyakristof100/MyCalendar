@@ -66,11 +66,10 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
   /// hónap — mint egy lapozás.
   void _onSwipe(DragEndDetails details) {
     final velocity = details.primaryVelocity ?? 0;
-    if (velocity <= -300) {
-      _shiftMonth(1);
-    } else if (velocity >= 300) {
-      _shiftMonth(-1);
-    }
+    if (velocity.abs() < 300) return;
+    // Csak a tényleges lapozás rezeg — a küszöb alatti húzás nem.
+    HapticFeedback.selectionClick();
+    _shiftMonth(velocity < 0 ? 1 : -1);
   }
 
   /// Napra bontja az eseményeket. Az időpontos, több napon átnyúló esemény

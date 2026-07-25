@@ -42,7 +42,12 @@ class _EventFormState extends ConsumerState<_EventForm> {
   /// A kiválasztott kategória — új eseménynél még nincs mihez rendelni, ezért
   /// az űrlapon várakozik, és a mentés köti rá a létrejött eseményre.
   String? _categoryId;
+  bool _allDay = false;
   bool _saving = false;
+
+  /// Csak új eseménynél állítható. Meglévő sorozatnál a szabályt változatlanul
+  /// visszaírjuk — az „ismétlődés átállítása" külön szerkesztő lenne.
+  Recurrence _recurrence = Recurrence.none;
 
   bool get _isEdit => widget.editing != null;
 
@@ -53,10 +58,11 @@ class _EventFormState extends ConsumerState<_EventForm> {
     if (editing != null) {
       _title.text = editing.title;
       _categoryId = ref.read(categoriesProvider).of(editing.id)?.id;
+      _allDay = editing.allDay;
       _start = editing.at;
-      // Egész naposnak nincs vége a modellben; a form időpontos, ezért +1 óra.
-      // ponytail: az egész napos esemény szerkesztve időpontossá válik — a form
-      // amúgy sem tud egész naposat. Ha kell, jöhet egy „egész nap" kapcsoló.
+      // Egész naposnak nincs vége a modellben (a kezdés helyi éjfél). A mentés
+      // ezt úgyis a nap végére számolja — a +1 óra csak arra kell, hogy a
+      // kapcsolót kikapcsolva legyen értelmes időpontos vég.
       _end = editing.end ?? editing.at.add(const Duration(hours: 1));
     } else {
       _start = _initialStart();
@@ -167,10 +173,20 @@ class _EventFormState extends ConsumerState<_EventForm> {
           title: title,
           start: _start,
           end: _end,
+          allDay: _allDay,
+          // Változatlanul vissza: enélkül a natív oldal DTEND-et írna a sorozat
+          // DURATION-je helyett, és a naptár elutasítaná a mentést.
+          rrule: editing.rrule,
         );
         await categories.assign(editing.id, categoryId);
       } else {
-        final id = await createEvent(title: title, start: _start, end: _end);
+        final id = await createEvent(
+          title: title,
+          start: _start,
+          end: _end,
+          allDay: _allDay,
+          rrule: rruleFor(_recurrence, _start),
+        );
         // Kategória nélkül nincs mit menteni; azonosító nélkül nincs mire.
         if (id != null && categoryId != null) {
           await categories.assign(id, categoryId);
@@ -234,6 +250,17 @@ class _EventFormState extends ConsumerState<_EventForm> {
                 ],
               ),
               const SizedBox(height: 22),
+              // Az id a sorozat sora, nem az előfordulásé: a mentés minden
+              // előfordulást átír. Ezt előre kell tudni, ezért van legfelül.
+              if (widget.editing?.recurring ?? false) ...[
+                _Warning(
+                  text:
+                      'Ismétlődő esemény: a módosítás a sorozat minden '
+                      'előfordulására érvényes, és a sorozat kezdete erre a '
+                      'napra kerül.',
+                ),
+                const SizedBox(height: 16),
+              ],
               TextField(
                 controller: _title,
                 autofocus: !_isEdit,
@@ -279,13 +306,31 @@ class _EventFormState extends ConsumerState<_EventForm> {
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
                   child: Column(
                     children: [
-                      _WhenRow(
-                        label: 'Kezdés',
-                        value: _start,
-                        onDate: () => _pickDate(end: false),
-                        onTime: () => _pickTime(end: false),
+                      SwitchListTile(
+                        value: _allDay,
+                        onChanged: (value) => setState(() => _allDay = value),
+                        title: const Text('Egész napos'),
+                        secondary: const Icon(Icons.today_outlined),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
                       ),
-                      Padding(
+                      const SizedBox(height: 6),
+                      // Egész naposnál nincs időpont és nincs külön vég: a nap
+                      // maga az esemény.
+                      if (_allDay)
+                        _WhenRow(
+                          label: 'Nap',
+                          value: _start,
+                          onDate: () => _pickDate(end: false),
+                        )
+                      else ...[
+                        _WhenRow(
+                          label: 'Kezdés',
+                          value: _start,
+                          onDate: () => _pickDate(end: false),
+                          onTime: () => _pickTime(end: false),
+                        ),
+                        Padding(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Row(
                           children: [
@@ -332,16 +377,43 @@ class _EventFormState extends ConsumerState<_EventForm> {
                           ],
                         ),
                       ),
-                      _WhenRow(
-                        label: 'Vége',
-                        value: _end,
-                        onDate: () => _pickDate(end: true),
-                        onTime: () => _pickTime(end: true),
-                      ),
+                        _WhenRow(
+                          label: 'Vége',
+                          value: _end,
+                          onDate: () => _pickDate(end: true),
+                          onTime: () => _pickTime(end: true),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
+              // Meglévő eseménynél nincs itt: az ismétlődés átállítása a
+              // sorozat átírása lenne, nem ugyanaz a művelet.
+              if (!_isEdit) ...[
+                const SizedBox(height: 16),
+                DropdownButtonFormField<Recurrence>(
+                  initialValue: _recurrence,
+                  onChanged: (value) =>
+                      setState(() => _recurrence = value ?? Recurrence.none),
+                  decoration: InputDecoration(
+                    labelText: 'Ismétlődés',
+                    prefixIcon: const Icon(Icons.repeat_rounded),
+                    filled: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  items: [
+                    for (final option in Recurrence.values)
+                      DropdownMenuItem(
+                        value: option,
+                        child: Text(_recurrenceLabels[option]!),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: ready ? _save : null,
@@ -373,6 +445,46 @@ class _EventFormState extends ConsumerState<_EventForm> {
   }
 }
 
+const _recurrenceLabels = {
+  Recurrence.none: 'Nem ismétlődik',
+  Recurrence.daily: 'Naponta',
+  Recurrence.weekly: 'Hetente ugyanezen a napon',
+  Recurrence.yearly: 'Évente',
+};
+
+/// Figyelmeztető sáv — most egy helyen kell, a sorozat-szerkesztésnél.
+class _Warning extends StatelessWidget {
+  const _Warning({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.tertiary;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.repeat_rounded, size: 20, color: color),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Emberi hossz-címke: „1 óra 30 perc", „45 perc", több napra „2 nap 3 óra".
 String _durationLabel(Duration d) {
   final days = d.inDays;
@@ -392,13 +504,15 @@ class _WhenRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onDate,
-    required this.onTime,
+    this.onTime,
   });
 
   final String label;
   final DateTime value;
   final VoidCallback onDate;
-  final VoidCallback onTime;
+
+  /// Az órachip elhagyható — egész napos eseménynél nincs időpont.
+  final VoidCallback? onTime;
 
   @override
   Widget build(BuildContext context) {
@@ -424,12 +538,14 @@ class _WhenRow extends StatelessWidget {
                 onTap: onDate,
               ),
             ),
-            const SizedBox(width: 10),
-            _PickerChip(
-              icon: Icons.schedule_outlined,
-              label: hhmm(value),
-              onTap: onTime,
-            ),
+            if (onTime != null) ...[
+              const SizedBox(width: 10),
+              _PickerChip(
+                icon: Icons.schedule_outlined,
+                label: hhmm(value),
+                onTap: onTime!,
+              ),
+            ],
           ],
         ),
       ],

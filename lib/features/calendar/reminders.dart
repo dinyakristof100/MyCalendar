@@ -11,16 +11,27 @@ import 'calendar_service.dart';
 /// ponytail: fix érték. Ha kérni fogják, ez lesz az első felhasználói beállítás.
 const _allDayReminderHour = 18;
 
+/// Ennyivel tol el a „+10 perc" gomb. A gomb feliratába is ez megy.
+const _snoozeMinutes = 10;
+
 const _details = NotificationDetails(
   android: AndroidNotificationDetails(
     'event_reminders',
     'Naptár emlékeztetők',
-    channelDescription: 'Emlékeztető a naptáresemény előtt egy nappal és egy órával.',
+    channelDescription:
+        'Emlékeztető a naptáresemény előtt egy nappal és egy órával.',
     importance: Importance.high,
     priority: Priority.high,
     // Enélkül a „csak prioritásos” Ne zavarjanak mód elnyeli az értesítést, és
     // akkor az órára sem jut el. Eseményként a naptár-kivétel átengedi.
     category: AndroidNotificationCategory.event,
+    actions: [
+      AndroidNotificationAction(
+        snoozeAction,
+        '+$_snoozeMinutes perc',
+        showsUserInterface: true,
+      ),
+    ],
   ),
   iOS: DarwinNotificationDetails(),
 );
@@ -113,8 +124,14 @@ Future<void> scheduleReminders(List<CalendarEvent> events) async {
         id: base * 2 + r.slot,
         title: event.title,
         body: r.body,
-        // A koppintás (órán a „Megnyitás telefonon”) az eseménylistára visz.
-        payload: '/',
+        // A koppintás (órán a „Megnyitás telefonon”) az eseménylistára visz. A
+        // cím és a szöveg query-ként vele utazik: a „+10 perc" gombnak ebből
+        // kell újraépítenie az értesítést, mert az akció-válaszból csak az
+        // azonosító és a payload jön vissza. Az útvonal így is '/' marad.
+        payload: Uri(
+          path: '/',
+          queryParameters: {'t': event.title, 'b': r.body},
+        ).toString(),
         // ponytail: UTC-ben ütemezünk. A plugin az abszolút időpontot küldi a
         // platformnak (ISO8601, offsettel), így nem kell külön csomag a készülék
         // IANA időzónájának kiderítéséhez. Ismétlődő értesítéshez
@@ -128,4 +145,29 @@ Future<void> scheduleReminders(List<CalendarEvent> events) async {
       );
     }
   }
+}
+
+/// A „+10 perc" gomb: ugyanazzal az [id]-vel ütemezi újra a most megszólalt
+/// emlékeztetőt. Az azonosító a válaszból jön, tehát marad a `base * 2 + slot`
+/// tartományban (`< workoutIdBase`) — a következő teljes újraütemezés így
+/// megtalálja és eltakarítja, ha közben változik az esemény.
+///
+/// ponytail: az eredeti szöveg megy tovább, tehát az „Egy óra múlva" 10 perccel
+/// pontatlanná válik. Pontos szöveghez az eseményt kellene visszakeresni az
+/// azonosítóból (az `event.id.hashCode` viszont egyirányú).
+Future<void> snoozeReminder(int id, String payload) async {
+  final q = Uri.parse(payload).queryParameters;
+  await notifications.zonedSchedule(
+    id: id,
+    title: q['t'],
+    body: q['b'],
+    payload: payload,
+    scheduledDate: tz.TZDateTime.now(
+      tz.UTC,
+    ).add(const Duration(minutes: _snoozeMinutes)),
+    notificationDetails: _details,
+    // Mint a rendes emlékeztetőnél: a néhány perc doze-csúszás belefér, cserébe
+    // nincs szükség az Android 14+ exact alarm engedélyre.
+    androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+  );
 }
