@@ -99,10 +99,11 @@ void main() {
     String? left(DateTime at, {bool allDay = false}) =>
         timeLeftLabel(_event(at, allDay: allDay), _today);
 
-    test('egy napon túl napokban', () {
+    test('egy napon túl napokban és órákban', () {
+      expect(left(DateTime(2026, 7, 25, 13)), '3 nap 3 óra múlva');
+      expect(left(DateTime(2026, 7, 25, 9)), '2 nap 23 óra múlva');
+      // Kerek napnál nincs „0 óra".
       expect(left(DateTime(2026, 7, 25, 10)), '3 nap múlva');
-      // Kerek napokra csonkít: 2 nap 23 óra még „2 nap múlva".
-      expect(left(DateTime(2026, 7, 25, 9)), '2 nap múlva');
     });
 
     test('egy napon belül órákban', () {

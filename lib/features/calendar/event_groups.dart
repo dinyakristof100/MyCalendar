@@ -57,8 +57,10 @@ String dayLabel(DateTime day, {required DateTime today}) {
   return '${_months[day.month - 1]} ${day.day}., ${_weekdays[day.weekday - 1]}';
 }
 
-/// Mennyi idő van hátra az eseményig: egy napon túl napokban, egy napon belül
-/// órákban, egy órán belül percekben.
+/// Mennyi idő van hátra az eseményig: egy napon túl napokban ÉS órákban, egy
+/// napon belül órákban, egy órán belül percekben.
+///
+/// A kerek egységet nem írjuk ki nullával („3 nap 0 óra" helyett „3 nap").
 ///
 /// Az egész napos eseménynek nincs kezdési ideje — nála az éjfélig hátralévő
 /// órák helyett a naptári napok különbsége a válasz. A már elkezdődött (vagy a
@@ -70,7 +72,11 @@ String? timeLeftLabel(CalendarEvent event, DateTime now) {
   }
   final left = event.at.difference(now);
   if (left.isNegative) return null;
-  if (left.inDays > 0) return '${left.inDays} nap múlva';
+  if (left.inDays > 0) {
+    final hours = left.inHours % 24;
+    final rest = hours == 0 ? '' : ' $hours óra';
+    return '${left.inDays} nap$rest múlva';
+  }
   if (left.inHours > 0) return '${left.inHours} óra múlva';
   if (left.inMinutes > 0) return '${left.inMinutes} perc múlva';
   return 'Most kezdődik';
