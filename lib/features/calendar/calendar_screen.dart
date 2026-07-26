@@ -396,7 +396,7 @@ class _MonthHeader extends StatelessWidget {
 /// Egy eseménysáv magassága és a sávok közti rés. Három sáv fér ki, a helyüket
 /// a csempe akkor is kihagyja, ha aznap nincs esemény — így az eltérő
 /// eseményszám nem ugráltatja a rácsot.
-const _barHeight = 4.0;
+const _barHeight = 6.0;
 const _barGap = 2.0;
 const _barsBottom = 4.0;
 const _barsHeight = maxDayLanes * _barHeight + (maxDayLanes - 1) * _barGap;
