@@ -352,6 +352,10 @@ void main() {
     // A naptárlista NEM a beállítások lapján van, csak a bejárat.
     final entry = find.text('Megjelenő naptárak');
     await tester.scrollUntilVisible(entry, 400);
+    // A megtalált sor még a lista alsó gyorsítótárában (az alsó sáv alatt)
+    // állhat — ez húzza be ténylegesen a képre.
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
     await tester.tap(entry);
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Naptárak'), findsOneWidget);

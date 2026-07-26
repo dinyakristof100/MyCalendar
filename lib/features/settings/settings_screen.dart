@@ -39,7 +39,8 @@ class AppStyle {
 }
 
 /// A választható stílusok. Az első három a régi rendszer/világos/sötét, utána a
-/// saját paletták. Új stílushoz elég ide egy sort felvenni.
+/// saját paletták — mindegyik világos és sötét párban. Új stílushoz elég ide egy
+/// sort felvenni. A sötét párokat a kitöltött ikon különbözteti meg.
 const appStyles = <AppStyle>[
   AppStyle(
     id: 'system',
@@ -72,10 +73,28 @@ const appStyles = <AppStyle>[
     seed: Color(0xFFEC407A),
   ),
   AppStyle(
-    id: 'manly',
+    id: 'girly_dark',
+    label: 'Csajos sötét',
+    subtitle: 'Rózsaszín, sötét',
+    icon: Icons.favorite,
+    mode: ThemeMode.dark,
+    seed: Color(0xFFEC407A),
+  ),
+  AppStyle(
+    id: 'manly_light',
     label: 'Pasis',
-    subtitle: 'Acélos, sötét',
+    subtitle: 'Acélos, világos',
     icon: Icons.fitness_center_outlined,
+    mode: ThemeMode.light,
+    seed: Color(0xFF00695C),
+  ),
+  // A régi „manly" végig sötét volt — az id és a fényerő marad, csak a címke
+  // igazodik a párokhoz, hogy a korábbi választás ne váltson át világosra.
+  AppStyle(
+    id: 'manly',
+    label: 'Pasis sötét',
+    subtitle: 'Acélos, sötét',
+    icon: Icons.fitness_center,
     mode: ThemeMode.dark,
     seed: Color(0xFF00695C),
   ),
@@ -88,11 +107,27 @@ const appStyles = <AppStyle>[
     seed: Color(0xFF546E7A),
   ),
   AppStyle(
+    id: 'clean_dark',
+    label: 'Letisztult sötét',
+    subtitle: 'Visszafogott, sötét',
+    icon: Icons.circle,
+    mode: ThemeMode.dark,
+    seed: Color(0xFF546E7A),
+  ),
+  AppStyle(
     id: 'kids',
     label: 'Gyerekbarát',
     subtitle: 'Vidám, élénk',
     icon: Icons.child_care_outlined,
     mode: ThemeMode.light,
+    seed: Color(0xFFFF9800),
+  ),
+  AppStyle(
+    id: 'kids_dark',
+    label: 'Gyerekbarát sötét',
+    subtitle: 'Vidám, sötét',
+    icon: Icons.child_care,
+    mode: ThemeMode.dark,
     seed: Color(0xFFFF9800),
   ),
 ];
