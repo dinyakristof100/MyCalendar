@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,9 +8,8 @@ import '../../core/app_scaffold.dart';
 import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
 import '../auth/auth_controller.dart';
-import '../calendar/calendar_service.dart';
-import '../calendar/event_categories.dart';
 import '../workouts/workout_progress.dart';
+import 'wallpaper.dart';
 
 const _key = 'themeMode';
 
@@ -174,8 +175,20 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
           const Divider(height: 24),
+          const _SectionTitle('Háttérkép'),
+          const _WallpaperTile(),
+          const Divider(height: 24),
           const _SectionTitle('Naptárak'),
-          const _CalendarFilter(),
+          ListTile(
+            leading: const Icon(Icons.calendar_month_outlined),
+            title: const Text('Megjelenő naptárak'),
+            subtitle: const Text(
+              'Alapból csak a saját Google-naptárad látszik — itt kapcsolhatod '
+              'be a többit.',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/settings/calendars'),
+          ),
           const Divider(height: 24),
           const _SectionTitle('Edzés'),
           SwitchListTile(
@@ -220,48 +233,41 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-/// Melyik eszköz-naptár eseményei látszanak az appban.
+/// Háttérkép választása a galériából, előnézettel és eltávolítással.
 ///
-/// A kikapcsolt naptárak a listából, a naptárnézetből és az emlékeztetőkből is
-/// kiesnek — az esemény-providerek a szűrőt figyelik, ezért a kapcsoló azonnal
-/// hat, külön frissítés nélkül.
-class _CalendarFilter extends ConsumerWidget {
-  const _CalendarFilter();
+/// A kép a telefonon marad — a felhőbe nem megy (lásd [wallpaperProvider]).
+class _WallpaperTile extends ConsumerWidget {
+  const _WallpaperTile();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final hidden = ref.watch(hiddenCalendarsProvider);
+    final path = ref.watch(wallpaperProvider);
 
-    return switch (ref.watch(deviceCalendarsProvider)) {
-      AsyncData(:final value) when value.isEmpty => const ListTile(
-        leading: Icon(Icons.event_busy_outlined),
-        title: Text('Nincs naptár a készüléken'),
-      ),
-      AsyncData(:final value) => Column(
-        children: [
-          for (final calendar in value)
-            CheckboxListTile(
-              secondary: CategoryDot(color: calendar.color, size: 18),
-              title: Text(calendar.name),
-              subtitle: calendar.account == calendar.name
-                  ? null
-                  : Text(calendar.account),
-              value: !hidden.contains(calendar.key),
-              onChanged: (on) => ref
-                  .read(hiddenCalendarsProvider.notifier)
-                  .setVisible(calendar, on ?? true),
+    return ListTile(
+      leading: path == null
+          ? const Icon(Icons.image_outlined)
+          : ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.file(
+                File(path),
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+              ),
             ),
-        ],
+      title: Text(path == null ? 'Háttérkép választása' : 'Háttérkép cseréje'),
+      subtitle: const Text(
+        'A képet a telefonon tartjuk, nem szinkronizáljuk a felhőbe.',
       ),
-      // Engedély nélkül nincs mit felsorolni — az Események lap úgyis kéri.
-      AsyncError() => ListTile(
-        leading: Icon(Icons.lock_outline, color: theme.colorScheme.error),
-        title: const Text('Nem sikerült beolvasni a naptárakat'),
-        subtitle: const Text('Adj naptár-engedélyt, majd gyere vissza ide.'),
-      ),
-      _ => const ListTile(title: Text('Naptárak betöltése…')),
-    };
+      trailing: path == null
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: 'Háttérkép eltávolítása',
+              onPressed: () => ref.read(wallpaperProvider.notifier).clear(),
+            ),
+      onTap: () => ref.read(wallpaperProvider.notifier).pick(),
+    );
   }
 }
 

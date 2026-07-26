@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +10,7 @@ import 'package:my_calendar/features/auth/auth_controller.dart';
 import 'package:my_calendar/features/calendar/calendar_service.dart';
 import 'package:my_calendar/features/calendar/event_groups.dart';
 import 'package:my_calendar/features/help/guide.dart';
+import 'package:my_calendar/features/settings/wallpaper.dart';
 import 'package:my_calendar/features/workouts/motivation.dart';
 import 'package:my_calendar/core/prefs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -336,6 +340,71 @@ void main() {
     await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Más'))));
     await tester.pumpAndSettle();
     expect(find.text(guideTopics.first.title), findsNothing);
+  });
+
+  testWidgets('a naptárak külön aloldalon nyílnak a beállításokból', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Beállítások');
+
+    // A naptárlista NEM a beállítások lapján van, csak a bejárat.
+    final entry = find.text('Megjelenő naptárak');
+    await tester.scrollUntilVisible(entry, 400);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(AppBar, 'Naptárak'), findsOneWidget);
+  });
+
+  group('háttérkép', () {
+    // A legkisebb érvényes PNG: a kép tartalma mindegy, létezőnek kell lennie.
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ'
+      'DwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    );
+    late File file;
+
+    setUp(() async {
+      file = File('${Directory.systemTemp.path}/mycalendar_wallpaper.png');
+      await file.writeAsBytes(png);
+    });
+    tearDown(() async {
+      if (file.existsSync()) await file.delete();
+      await prefs.remove('wallpaper');
+    });
+
+    testWidgets('beállítva a lapok mögé kerül, és átlátszóvá teszi őket', (
+      tester,
+    ) async {
+      await prefs.setString('wallpaper', file.path);
+      await tester.pumpWidget(
+        _appWith(const AsyncValue.data(AuthUser('Teszt'))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Wallpaper), findsOneWidget);
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(app.theme?.scaffoldBackgroundColor, Colors.transparent);
+      expect(app.darkTheme?.scaffoldBackgroundColor, Colors.transparent);
+    });
+
+    testWidgets('a közben eltűnt fájlt eldobjuk, nem lesz üres a felület', (
+      tester,
+    ) async {
+      // Valódi fájlműveletet a teszt törzsében nem szabad megvárni (a
+      // testWidgets hamis órája nem hajtja az I/O-t) — elég egy nem létező út.
+      await prefs.setString('wallpaper', '${file.path}.nincs');
+
+      await tester.pumpWidget(
+        _appWith(const AsyncValue.data(AuthUser('Teszt'))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Wallpaper), findsNothing);
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(app.theme?.scaffoldBackgroundColor, isNot(Colors.transparent));
+    });
   });
 
   testWidgets('a súgó a beállításokból nyílik és újraindítja a bemutatót', (

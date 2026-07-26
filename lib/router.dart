@@ -8,6 +8,7 @@ import 'features/auth/login_screen.dart';
 import 'features/calendar/calendar_screen.dart';
 import 'features/events/events_screen.dart';
 import 'features/help/guide.dart';
+import 'features/settings/calendars_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/workouts/plan_form_screen.dart';
 import 'features/workouts/workouts_screen.dart';
@@ -83,6 +84,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/settings',
                 builder: (_, _) => const SettingsScreen(),
                 routes: [
+                  GoRoute(
+                    path: 'calendars',
+                    builder: (_, _) => const CalendarsScreen(),
+                  ),
                   GoRoute(path: 'help', builder: (_, _) => const HelpScreen()),
                 ],
               ),

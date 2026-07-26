@@ -5,8 +5,12 @@ import 'package:google_sign_in/google_sign_in.dart';
 /// A UI-nak ennyi kell a bejelentkezett felhasználóból. Így sem a router, sem a
 /// képernyők nem függenek a Firebase típusaitól — és tesztben felülírható.
 class AuthUser {
-  const AuthUser(this.name);
+  const AuthUser(this.name, {this.email});
   final String name;
+
+  /// A bejelentkezett Google-fiók e-mail címe. Ez köti össze a fiókot az eszköz
+  /// naptáraival (lásd `defaultVisible`) — a naptárak fiókneve ugyanez a cím.
+  final String? email;
 }
 
 final _firebaseUserProvider = StreamProvider<User?>(
@@ -21,7 +25,10 @@ final currentUserProvider = Provider<AsyncValue<AuthUser?>>((ref) {
       .whenData(
         (user) => user == null
             ? null
-            : AuthUser(user.displayName ?? user.email ?? 'Felhasználó'),
+            : AuthUser(
+                user.displayName ?? user.email ?? 'Felhasználó',
+                email: user.email,
+              ),
       );
 });
 

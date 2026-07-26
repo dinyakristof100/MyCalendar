@@ -26,11 +26,11 @@ import java.util.Date
  * Miért RemoteViews és nem Glance? Mert a projektben nincs Compose beállítva, és
  * három sornyi szöveghez nem éri meg behozni.
  *
- * ponytail: a widget MINDEN naptárat mutat — a beállításokban elrejtett
- * naptárakat is. Az elrejtés a Flutter SharedPreferences-ében él, amit innen
- * csak a `FlutterSharedPreferences` XML kulcsainak ismeretében lehetne
- * kiolvasni. Ha zavaróvá válik: a `flutter.hiddenCalendars` JSON-t kell
- * beolvasni és a [queryCalendars] fiók+név párosával összevetni.
+ * ponytail: a widget MINDEN naptárat mutat — a beállításokban kikapcsoltakat
+ * is. A kiválasztás a Flutter SharedPreferences-ében él, amit innen csak a
+ * `FlutterSharedPreferences` XML kulcsainak ismeretében lehetne kiolvasni. Ha
+ * zavaróvá válik: a `flutter.visibleCalendars` JSON-t kell beolvasni és a
+ * [queryCalendars] fiók+név párosával összevetni.
  */
 class TodayWidget : AppWidgetProvider() {
 

@@ -21,9 +21,9 @@ const syncedKeys = <String>[
   'themeMode', // színkészlet
   'eventCategories', // naptárkategóriák (név + szín)
   'eventCategoryAssignments', // esemény -> kategória
-  // Elrejtett eszköz-naptárak. A kulcs fiók+név, nem naptár-id: az id
+  // A bekapcsolt eszköz-naptárak. A kulcs fiók+név, nem naptár-id: az id
   // eszközspecifikus, a fiók+név páros viszont a másik telefonon is ugyanaz.
-  'hiddenCalendars',
+  'visibleCalendars',
   'workoutPlans', // edzéstervek
   'activeWorkoutPlan', // az aktív terv
   'workoutProgress', // a hét teljesített napjai
@@ -115,7 +115,7 @@ final cloudSyncProvider = Provider<void>((ref) {
         ref.invalidate(categoriesProvider);
         // A naptárszűrőt az esemény-providerek figyelik: elég ezt frissíteni,
         // a lista és a naptárnézet magától újratölt.
-        ref.invalidate(hiddenCalendarsProvider);
+        ref.invalidate(visibleCalendarsProvider);
         ref.invalidate(workoutPlansProvider);
         ref.invalidate(workoutProgressProvider);
         ref.invalidate(carryOverProvider);

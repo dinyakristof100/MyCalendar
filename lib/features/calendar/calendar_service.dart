@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
+import '../auth/auth_controller.dart';
 
 /// Az eszköz naptárát olvasó és író natív csatorna (lásd `MainActivity.kt`).
 const _channel = MethodChannel('mycalendar/device_calendar');
@@ -215,7 +216,7 @@ class DeviceCalendar {
   final String account;
   final Color color;
 
-  /// Az elrejtés tárolási kulcsa: fiók + név, NEM az [id]. A két mező
+  /// A kiválasztás tárolási kulcsa: fiók + név, NEM az [id]. A két mező
   /// JSON-tömbként áll össze — így nem kell olyan elválasztó jelet keresni, ami
   /// biztosan nem szerepel egyik névben sem.
   ///
@@ -251,59 +252,77 @@ DeviceCalendar _parseCalendar(Map<String, Object?> raw) => DeviceCalendar(
       : Color(raw['color']! as int),
 );
 
-const _hiddenCalendarsKey = 'hiddenCalendars';
+const _visibleCalendarsKey = 'visibleCalendars';
 
-/// Az elrejtett naptárak kulcsai (lásd [DeviceCalendar.key]).
-final hiddenCalendarsProvider =
-    NotifierProvider<HiddenCalendarsController, Set<String>>(
-      HiddenCalendarsController.new,
+/// A bekapcsolt naptárak kulcsai (lásd [DeviceCalendar.key]), vagy `null`, ha a
+/// felhasználó még nem választott — ilyenkor [defaultVisible] dönt.
+///
+/// A hiányzó beállítás és az üres halmaz szándékosan NEM ugyanaz: az utóbbi a
+/// „mindent kikapcsoltam" választás, amit tiszteletben kell tartani.
+final visibleCalendarsProvider =
+    NotifierProvider<VisibleCalendarsController, Set<String>?>(
+      VisibleCalendarsController.new,
     );
 
-class HiddenCalendarsController extends Notifier<Set<String>> {
+class VisibleCalendarsController extends Notifier<Set<String>?> {
   @override
-  Set<String> build() => {
-    for (final key
-        in jsonDecode(prefs.getString(_hiddenCalendarsKey) ?? '[]') as List)
-      key as String,
-  };
+  Set<String>? build() {
+    final saved = prefs.getString(_visibleCalendarsKey);
+    if (saved == null) return null;
+    return {for (final key in jsonDecode(saved) as List) key as String};
+  }
 
-  /// Egy naptár mutatása/elrejtése. Az esemény-providerek ezt a state-et
-  /// figyelik, ezért magától frissül tőle a lista és a naptárnézet is.
-  Future<void> setVisible(DeviceCalendar calendar, bool visible) async {
-    final next = state.toSet();
-    if (visible) {
-      next.remove(calendar.key);
-    } else {
-      next.add(calendar.key);
-    }
-    state = next;
-    await saveSetting(_hiddenCalendarsKey, jsonEncode(next.toList()));
+  /// A kiválasztás felülírása. Az esemény-providerek ezt a state-et figyelik,
+  /// ezért magától frissül tőle a lista és a naptárnézet is.
+  Future<void> set(Set<String> keys) async {
+    state = keys;
+    await saveSetting(_visibleCalendarsKey, jsonEncode(keys.toList()));
   }
 }
 
-/// A látszó naptárak azonosítói: az elrejtetteken kívül minden.
+/// Az alapértelmezett kiválasztás: a bejelentkezett Google-fiók saját naptára.
 ///
-/// Ismeretlen — másik eszközön elrejtett, itt nem létező — kulcs nem rejt el
-/// semmit: az egyezéseket vesszük ki, nem a nem-egyezéseket tartjuk meg.
+/// A fiók „primary" naptárának neve maga az e-mail cím — csak ez kell, az
+/// ünnepnapok- és születésnapok-naptárak nem. Ha ilyen nincs (a naptár más néven
+/// fut), a fiók összes naptára jön: jobb valamit mutatni, mint semmit. A többit
+/// a felhasználó a Beállítások → Naptárak alatt kapcsolja be.
+Set<String> defaultVisible(List<DeviceCalendar> calendars, String? email) {
+  if (email == null) return const {};
+  final mine = [
+    for (final calendar in calendars)
+      if (calendar.account == email) calendar,
+  ];
+  final primary = [
+    for (final calendar in mine)
+      if (calendar.name == calendar.account) calendar,
+  ];
+  return {for (final calendar in primary.isEmpty ? mine : primary) calendar.key};
+}
+
+/// A látszó naptárak azonosítói.
+///
+/// Ismeretlen — másik eszközön kiválasztott, itt nem létező — kulcs egyszerűen
+/// nem talál naptárat.
 List<int> visibleCalendarIds(
   List<DeviceCalendar> calendars,
-  Set<String> hidden,
+  Set<String> visible,
 ) => [
   for (final calendar in calendars)
-    if (!hidden.contains(calendar.key)) calendar.id,
+    if (visible.contains(calendar.key)) calendar.id,
 ];
 
-/// A natív lekérdezésnek átadandó naptárszűrő.
+/// A natív lekérdezésnek átadandó naptárszűrő: mindig konkrét id-lista.
 ///
-/// `null`: nincs mit szűrni, jöhet minden naptár (ez a szűrő bevezetése előtti
-/// viselkedés, és ilyenkor a naptárlistát le sem kell kérni). Üres lista: a
-/// felhasználó mindent elrejtett — ilyenkor a hívó meg se kérdezi a naptárat.
-Future<List<int>?> _calendarFilter(Ref ref) async {
-  final hidden = ref.watch(hiddenCalendarsProvider);
-  if (hidden.isEmpty) return null;
+/// Üres lista: nincs bekapcsolt naptár — ilyenkor a hívó meg se kérdezi a
+/// naptárat. (A natív oldal az üres listát „nincs szűrő"-nek venné.)
+Future<List<int>> _calendarFilter(Ref ref) async {
+  // A watch-ok az await ELŐTT: utána a provider már nem venné fel a függőséget.
+  final chosen = ref.watch(visibleCalendarsProvider);
+  final email = ref.watch(currentUserProvider).value?.email;
+  final calendars = await ref.watch(deviceCalendarsProvider.future);
   return visibleCalendarIds(
-    await ref.watch(deviceCalendarsProvider.future),
-    hidden,
+    calendars,
+    chosen ?? defaultVisible(calendars, email),
   );
 }
 
@@ -314,12 +333,11 @@ Future<List<CalendarEvent>> _queryEvents(
   Map<String, Object?> args,
 ) async {
   final ids = await _calendarFilter(ref);
-  // Minden naptár el van rejtve: nincs mit lekérdezni. (Az üres listát a natív
-  // oldal „nincs szűrő"-nek venné, és mindent visszaadna.)
-  if (ids != null && ids.isEmpty) return const [];
+  // Nincs bekapcsolt naptár: nincs mit lekérdezni.
+  if (ids.isEmpty) return const [];
   final raw = await _channel.invokeMethod<List<Object?>>(method, {
     ...args,
-    'calendarIds': ?ids,
+    'calendarIds': ids,
   });
   return [
     for (final event in raw ?? const <Object?>[])

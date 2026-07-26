@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.3.0+3
+version: 1.4.0+3
 
 environment:
   sdk: ^3.12.2
@@ -51,6 +51,12 @@ dependencies:
   # rendszer telepítőjét (a Play Store nem szolgálja ki ezt az appot). Csak
   # Android — iOS-en az önfrissítés tiltott.
   ota_update: ^7.1.0
+  # Háttérkép választása a galériából. A rendszer fotóválasztóját nyitja meg,
+  # ezért nincs szükség tárhely-engedélyre.
+  image_picker: ^1.2.0
+  # A választott kép az app saját mappájába kerül — a gyorsítótárat (ahova az
+  # image_picker másol) a rendszer bármikor kitakaríthatja.
+  path_provider: ^2.1.5
 dev_dependencies:
   flutter_test:
     sdk: flutter

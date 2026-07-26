@@ -18,25 +18,44 @@ void main() {
   final masikMunka = _calendar(3, 'Munka', account: 'masik@pelda.hu');
   final calendars = [munka, privat, masikMunka];
 
-  test('elrejtés nélkül minden naptár látszik', () {
-    expect(visibleCalendarIds(calendars, const {}), [1, 2, 3]);
-  });
-
-  test('az elrejtett naptár kiesik, a többi marad', () {
-    expect(visibleCalendarIds(calendars, {privat.key}), [1, 3]);
+  test('csak a bekapcsolt naptár látszik', () {
+    expect(visibleCalendarIds(calendars, {privat.key}), [2]);
   });
 
   test('az azonos nevű, másik fiókos naptárt nem viszi magával', () {
-    expect(visibleCalendarIds(calendars, {munka.key}), [2, 3]);
+    expect(visibleCalendarIds(calendars, {munka.key}), [1]);
   });
 
-  test('ismeretlen (másik eszközről mentett) kulcs nem rejt el semmit', () {
-    final hidden = {_calendar(99, 'Nincs ilyen', account: 'x@y.hu').key};
-    expect(visibleCalendarIds(calendars, hidden), [1, 2, 3]);
+  test('ismeretlen (másik eszközről mentett) kulcs nem hoz be semmit', () {
+    final visible = {_calendar(99, 'Nincs ilyen', account: 'x@y.hu').key};
+    expect(visibleCalendarIds(calendars, visible), isEmpty);
   });
 
-  test('minden naptár elrejtve: üres lista, nem "nincs szűrő"', () {
-    final hidden = {for (final c in calendars) c.key};
-    expect(visibleCalendarIds(calendars, hidden), isEmpty);
+  test('semmi sincs bekapcsolva: üres lista, nem "nincs szűrő"', () {
+    expect(visibleCalendarIds(calendars, const {}), isEmpty);
+  });
+
+  group('alapértelmezés', () {
+    // A Google-fiók saját naptárának neve maga az e-mail cím.
+    final sajat = _calendar(10, 'en@pelda.hu');
+    final unnepek = _calendar(11, 'Ünnepnapok Magyarországon');
+    final maseAccount = _calendar(12, 'masik@pelda.hu', account: 'masik@pelda.hu');
+
+    test('csak a bejelentkezett fiók saját naptára', () {
+      final all = [sajat, unnepek, maseAccount, privat];
+      expect(defaultVisible(all, 'en@pelda.hu'), {sajat.key});
+    });
+
+    test('saját naptár híján a fiók összes naptára', () {
+      expect(defaultVisible([unnepek, privat, maseAccount], 'en@pelda.hu'), {
+        unnepek.key,
+        privat.key,
+      });
+    });
+
+    test('ismeretlen (vagy még be nem töltött) fiók: semmi', () {
+      expect(defaultVisible(calendars, null), isEmpty);
+      expect(defaultVisible(calendars, 'senki@pelda.hu'), isEmpty);
+    });
   });
 }
