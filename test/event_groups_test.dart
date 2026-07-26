@@ -44,6 +44,57 @@ void main() {
     ]);
   });
 
+  group('sávkiosztás a hónaprácshoz', () {
+    DateTime day(int d) => DateTime(2026, 7, d);
+
+    /// A naptárnézet `_byDay` térképe rövidebben: nap sorszáma -> események.
+    Map<DateTime, List<CalendarEvent>> byDay(Map<int, List<CalendarEvent>> raw) =>
+        {for (final entry in raw.entries) day(entry.key): entry.value};
+
+    test('a több napos esemény minden napján ugyanabba a sávba kerül', () {
+      // Ugyanaz az objektum kerül fel mindhárom napra — pont, ahogy a
+      // naptárnézet is szétteríti a több napos eseményt.
+      final hosszu = _event(day(1), title: 'hosszú');
+      final lanes = assignEventLanes(
+        byDay({
+          1: [_event(day(1), title: 'a'), hosszu],
+          2: [hosszu],
+          3: [hosszu, _event(day(3), title: 'b')],
+        }),
+      );
+
+      // A leghosszabb választ előbb: övé a felső sáv, végig.
+      expect(lanes[day(1)]![0], same(hosszu));
+      expect(lanes[day(2)]![0], same(hosszu));
+      expect(lanes[day(3)]![0], same(hosszu));
+      // Az egynaposak alá kerülnek, a köztes napon nem foglalnak semmit.
+      expect(lanes[day(1)]![1]?.title, 'a');
+      expect(lanes[day(3)]![1]?.title, 'b');
+      expect(lanes[day(2)]![1], isNull);
+    });
+
+    test('naponta legfeljebb három sáv, a többi kimarad', () {
+      final events = [
+        for (var hour = 8; hour < 13; hour++)
+          _event(DateTime(2026, 7, 1, hour), title: '$hour'),
+      ];
+      final lanes = assignEventLanes(byDay({1: events}));
+
+      expect(lanes[day(1)], hasLength(maxDayLanes));
+      // A nap első három eseménye látszik, a maradék kettő nem.
+      expect(lanes[day(1)], events.take(maxDayLanes));
+    });
+
+    test('esemény nélküli nap nem kap sávot', () {
+      final lanes = assignEventLanes(
+        byDay({
+          1: [_event(day(1))],
+        }),
+      );
+      expect(lanes[day(2)], isNull);
+    });
+  });
+
   group('nowMarkerIndex', () {
     test('üres nap: a vonal a végén (nulladik) helyen áll', () {
       expect(nowMarkerIndex(const [], _today), 0);

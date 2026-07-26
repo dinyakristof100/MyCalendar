@@ -70,6 +70,62 @@ int nowMarkerIndex(List<CalendarEvent> dayEvents, DateTime now) {
   return dayEvents.length;
 }
 
+/// Ennyi eseménysáv fér ki egy naptári nap csempéjén. A fölötte lévő
+/// események a rácsban nem látszanak — a nap kiválasztásakor a lista alatta
+/// viszont mindet felsorolja.
+const maxDayLanes = 3;
+
+/// Sávkiosztás a hónaprácshoz: melyik esemény a nap hányadik sávjába kerül.
+///
+/// A több napon átnyúló esemény MINDEN napján ugyanabba a sávba kerül — csak
+/// így látszik a rácsban folytonos sávnak. Ezért nem naponként osztunk sávot,
+/// hanem eseményenként: a hosszabbak választanak először, és mindegyik a
+/// legfelső olyan sávot kapja, ami az összes napján szabad.
+///
+/// A visszaadott lista mindig [maxDayLanes] hosszú, a `null` elem üres sáv.
+/// Sávok között lyuk nem keletkezik: mindenki a legfelső szabad sávot kapja.
+Map<DateTime, List<CalendarEvent?>> assignEventLanes(
+  Map<DateTime, List<CalendarEvent>> byDay,
+) {
+  // Esemény -> mely napokon szerepel. A kulcs maga az objektum, nem az id: az
+  // ismétlődő esemény minden előfordulása ugyanazt az id-t viseli, de külön
+  // eseményként kap sávot.
+  final spans = <CalendarEvent, List<DateTime>>{};
+  for (final entry in byDay.entries) {
+    for (final event in entry.value) {
+      spans.putIfAbsent(event, () => []).add(entry.key);
+    }
+  }
+
+  final events = spans.keys.toList()
+    ..sort((a, b) {
+      // A hosszabb sáv választ előbb: a több napos esemény kerül felülre, így a
+      // folytonosságát nem töri meg egy alá kerülő egynapos.
+      final byLength = spans[b]!.length.compareTo(spans[a]!.length);
+      if (byLength != 0) return byLength;
+      if (a.allDay != b.allDay) return a.allDay ? -1 : 1;
+      return a.at.compareTo(b.at);
+    });
+
+  final lanes = <DateTime, List<CalendarEvent?>>{};
+  for (final event in events) {
+    final days = spans[event]!;
+    var lane = 0;
+    while (lane < maxDayLanes && days.any((day) => lanes[day]?[lane] != null)) {
+      lane++;
+    }
+    // Nem fér ki: valamelyik napján már mind a három sáv foglalt.
+    if (lane == maxDayLanes) continue;
+    for (final day in days) {
+      lanes.putIfAbsent(
+        day,
+        () => List<CalendarEvent?>.filled(maxDayLanes, null),
+      )[lane] = event;
+    }
+  }
+  return lanes;
+}
+
 /// Napokra bontja az eseményeket, a napokat időrendben adja vissza.
 ///
 /// Egy napon belül az egész naposak állnak elöl: az egész napra vonatkoznak,

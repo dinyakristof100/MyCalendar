@@ -15,8 +15,9 @@ import 'event_groups.dart';
 const _weekdayLabels = ['H', 'K', 'Sze', 'Cs', 'P', 'Szo', 'V'];
 
 /// A naptár hónapnézete: minden nap egy csempe, a napok típusuk szerint
-/// színezve, az eseményekhez tartozó kategóriaszínek pöttyökkel. Eseményt itt
-/// nem lehet létrehozni — a naptár olvasónézet, mint egy telefonos naptár.
+/// színezve, az események a csempe alján legfeljebb három színes sávval (a
+/// több napos esemény sávja átér a szomszéd napra). Eseményt itt nem lehet
+/// létrehozni — a naptár olvasónézet, mint egy telefonos naptár.
 class CalendarScreen extends ConsumerStatefulWidget {
   const CalendarScreen({super.key});
 
@@ -209,6 +210,10 @@ class _CalendarBody extends StatelessWidget {
     final start = gridStart(month);
     final isCurrentMonth = month.year == now.year && month.month == now.month;
 
+    // A sávkiosztás az egész rácsra egyben készül: a több napos esemény csak
+    // így kerül minden napján ugyanabba a sávba.
+    final lanes = assignEventLanes(byDay);
+
     final tiles = List.generate(gridDays, (i) {
       final day = DateTime(start.year, start.month, start.day + i);
       return _DayTile(
@@ -216,7 +221,14 @@ class _CalendarBody extends StatelessWidget {
         inMonth: day.month == month.month,
         isToday: day == today,
         isSelected: day == selected,
-        events: byDay[day] ?? const [],
+        lanes: lanes[day],
+        // A hét szélén nincs mihez hozzáérni: a szomszéd nap másik sorba esik.
+        lanesBefore: day.weekday == DateTime.monday
+            ? null
+            : lanes[DateTime(start.year, start.month, start.day + i - 1)],
+        lanesAfter: day.weekday == DateTime.sunday
+            ? null
+            : lanes[DateTime(start.year, start.month, start.day + i + 1)],
         categories: categories,
         onTap: () => onSelect(day),
       );
@@ -281,7 +293,10 @@ class _CalendarBody extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
+            // Vízszintesen NINCS rés: a szomszédos napok cellái összeérnek,
+            // különben a több napos esemény sávja megszakadna. A csempék közti
+            // látszó térközt a csempén belüli behúzás adja (lásd [_DayTile]).
+            crossAxisSpacing: 0,
             childAspectRatio: 0.82,
             children: tiles,
           ),
@@ -378,13 +393,28 @@ class _MonthHeader extends StatelessWidget {
   }
 }
 
+/// Egy eseménysáv magassága és a sávok közti rés. Három sáv fér ki, a helyüket
+/// a csempe akkor is kihagyja, ha aznap nincs esemény — így az eltérő
+/// eseményszám nem ugráltatja a rácsot.
+const _barHeight = 4.0;
+const _barGap = 2.0;
+const _barsBottom = 4.0;
+const _barsHeight = maxDayLanes * _barHeight + (maxDayLanes - 1) * _barGap;
+
+/// A csempe háttere és a cella széle közti térköz. A rácsban nincs vízszintes
+/// rés (különben a több napos sáv megszakadna), a csempék közti látszó
+/// hézagot ez a behúzás adja — a folytatódó sáv pedig épp ezt tölti ki.
+const _tileInset = 3.0;
+
 class _DayTile extends StatelessWidget {
   const _DayTile({
     required this.day,
     required this.inMonth,
     required this.isToday,
     required this.isSelected,
-    required this.events,
+    required this.lanes,
+    required this.lanesBefore,
+    required this.lanesAfter,
     required this.categories,
     required this.onTap,
   });
@@ -393,7 +423,14 @@ class _DayTile extends StatelessWidget {
   final bool inMonth;
   final bool isToday;
   final bool isSelected;
-  final List<CalendarEvent> events;
+
+  /// A nap sávjai (lásd `assignEventLanes`), és ugyanez a szomszéd napokról —
+  /// abból derül ki, hogy a sáv folytatódik-e balra vagy jobbra. `null`, ha
+  /// azon a napon nincs esemény, vagy a szomszéd másik sorba esik.
+  final List<CalendarEvent?>? lanes;
+  final List<CalendarEvent?>? lanesBefore;
+  final List<CalendarEvent?>? lanesAfter;
+
   final CategoryState categories;
   final VoidCallback onTap;
 
@@ -403,83 +440,116 @@ class _DayTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final palette = dayPalette(dayKindOf(day), theme);
 
-    // Legfeljebb négy pötty: a kategóriás esemény a kategória színét kapja, a
-    // kategória nélküli semleges szürkét — így a kategóriás kiemelkedik.
-    final dots = <Color>[];
-    for (final event in events) {
-      dots.add(categories.of(event.id)?.color ?? scheme.onSurfaceVariant);
-      if (dots.length >= 4) break;
-    }
-
     final numberColor = isToday
         ? scheme.onPrimary
         : (inMonth ? palette.accent : palette.accent.withValues(alpha: 0.45));
 
-    final tile = Material(
-      color: palette.fill,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          decoration: BoxDecoration(
+    final tile = Stack(
+      // A háttér a cella teljes méretét kitölti — nélküle a Stack csak a
+      // napszám köré húzódna össze.
+      fit: StackFit.expand,
+      // A folytatódó sáv egy hajszálnyit átlóg a szomszéd cellába (lásd [_bar]).
+      clipBehavior: Clip.none,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: _tileInset),
+          child: Material(
+            color: palette.fill,
             borderRadius: BorderRadius.circular(14),
-            border: isSelected
-                ? Border.all(color: scheme.primary, width: 2)
-                : null,
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          alignment: Alignment.center,
-          // A FittedBox szükség esetén arányosan kicsinyíti a tartalmat, így
-          // a csempe semmilyen képernyőn vagy betűméretnél nem tud túlcsordulni.
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  alignment: Alignment.center,
-                  decoration: isToday
-                      ? BoxDecoration(
-                          color: scheme.primary,
-                          shape: BoxShape.circle,
-                        )
-                      : null,
-                  child: Text(
-                    '${day.day}',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: numberColor,
-                      fontWeight: isToday || isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                // Alul kihagyjuk a sávok helyét, hogy a szám fölöttük maradjon.
+                padding: const EdgeInsets.fromLTRB(
+                  2,
+                  4,
+                  2,
+                  _barsBottom + _barsHeight,
+                ),
+                alignment: Alignment.center,
+                // A FittedBox szükség esetén arányosan kicsinyíti a tartalmat,
+                // így a csempe semmilyen képernyőn vagy betűméretnél nem tud
+                // túlcsordulni.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: isToday
+                        ? BoxDecoration(
+                            color: scheme.primary,
+                            shape: BoxShape.circle,
+                          )
+                        : null,
+                    child: Text(
+                      '${day.day}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: numberColor,
+                        fontWeight: isToday || isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                // Fix magasság, hogy az eltérő eseményszám ne ugráltassa a rácsot.
-                SizedBox(
-                  height: 6,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final color in dots)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                          child: CategoryDot(color: color, size: 6),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ),
+          ),
+        ),
+        // A sávok a cella teljes szélességét használhatják — a szomszéd nap
+        // sávja pontosan a cella határán folytatódik.
+        for (var lane = 0; lane < maxDayLanes; lane++)
+          if (lanes?[lane] != null) _bar(lane, scheme),
+        // A kijelölés kerete a sávok FÖLÉ kerül: a nap sávjai így a kereten
+        // belül maradnak, nem vágják át a vonalát.
+        if (isSelected)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _tileInset),
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: scheme.primary, width: 2),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    return inMonth ? tile : Opacity(opacity: 0.55, child: tile);
+  }
+
+  /// Egy sáv: a kategóriás esemény a kategória színét kapja, a kategória
+  /// nélküli semleges szürkét. A szomszéd nap felé, ha ott ugyanez az esemény
+  /// áll ebben a sávban, a behúzás és a lekerekítés is elmarad — így ér össze
+  /// a több napos esemény sávja.
+  ///
+  /// A folytatódó vég ráadásul egy logikai pixelt átlóg a szomszéd cellába:
+  /// enélkül a két szakasz élsimított széle között halvány hajszálvonal
+  /// maradna, épp ott, ahol folytonosnak kellene látszania.
+  Widget _bar(int lane, ColorScheme scheme) {
+    final event = lanes![lane]!;
+    final joinLeft = lanesBefore?[lane] == event;
+    final joinRight = lanesAfter?[lane] == event;
+
+    return Positioned(
+      left: joinLeft ? -1 : _tileInset,
+      right: joinRight ? -1 : _tileInset,
+      bottom: _barsBottom + (maxDayLanes - 1 - lane) * (_barHeight + _barGap),
+      height: _barHeight,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: categories.of(event.id)?.color ?? scheme.onSurfaceVariant,
+          borderRadius: BorderRadius.horizontal(
+            left: Radius.circular(joinLeft ? 0 : 2),
+            right: Radius.circular(joinRight ? 0 : 2),
           ),
         ),
       ),
     );
-
-    return inMonth ? tile : Opacity(opacity: 0.55, child: tile);
   }
 }
 
