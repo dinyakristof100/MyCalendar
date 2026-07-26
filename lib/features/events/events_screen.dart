@@ -176,7 +176,7 @@ class _EventList extends StatelessWidget {
         children.add(
           Appear(
             index: slot++,
-            child: _EventCard(event: day.events[i]),
+            child: _EventCard(event: day.events[i], now: today),
           ),
         );
       }
@@ -228,6 +228,9 @@ class _NextUpCard extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final time = formatTime(event);
     final when = dayLabel(event.at, today: today);
+    // A visszaszámláló a lista felépülésekor készül, nem ketyeg magától — a
+    // resume és a lehúzós frissítés úgyis újraépíti az egész listát.
+    final left = timeLeftLabel(event, today);
     final category = ref.watch(categoriesProvider).of(event.id);
 
     // Kategóriás eseménynél a hero-kártya is a kategória színét viseli, és a
@@ -284,11 +287,19 @@ class _NextUpCard extends ConsumerWidget {
                       color: fg.withValues(alpha: 0.8),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      time == null ? '$when · egész nap' : '$when · $time',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: fg.withValues(alpha: 0.9),
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    // Hosszabb szöveg (dátum + idő + visszaszámláló) inkább
+                    // törjön két sorba, mint hogy kilógjon a kártyából.
+                    Flexible(
+                      child: Text(
+                        [
+                          when,
+                          time ?? 'egész nap',
+                          ?left,
+                        ].join(' · '),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: fg.withValues(alpha: 0.9),
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
                     ),
                   ],
@@ -362,15 +373,17 @@ class _DayHeader extends StatelessWidget {
 }
 
 class _EventCard extends ConsumerWidget {
-  const _EventCard({required this.event});
+  const _EventCard({required this.event, required this.now});
 
   final CalendarEvent event;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final time = formatTime(event);
+    final left = timeLeftLabel(event, now);
     final category = ref.watch(categoriesProvider).of(event.id);
     // Kategóriás eseménynél a KÁRTYA HÁTTERE maga a kategória színe, és a szöveg
     // olyan (fehér/fekete), amelyik biztosan olvasható rajta (readableOn) — így a
@@ -412,8 +425,21 @@ class _EventCard extends ConsumerWidget {
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    if (category != null) ...[
-                      const Spacer(),
+                    // A visszaszámláló halványabb, mint az időpont: kiegészítés,
+                    // nem a sor főszereplője. Ez tolja a kategóriát jobbra —
+                    // Spacer helyett, hogy szűk kijelzőn ez rövidüljön előbb.
+                    Expanded(
+                      child: Text(
+                        left == null ? '' : '  ·  $left',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: accent.withValues(alpha: 0.75),
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                    if (category != null)
                       Text(
                         category.name,
                         style: theme.textTheme.labelSmall?.copyWith(
@@ -421,7 +447,6 @@ class _EventCard extends ConsumerWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
                   ],
                 ),
                 const SizedBox(height: 5),

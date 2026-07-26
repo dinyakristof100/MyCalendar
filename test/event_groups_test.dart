@@ -95,6 +95,37 @@ void main() {
     });
   });
 
+  group('timeLeftLabel', () {
+    String? left(DateTime at, {bool allDay = false}) =>
+        timeLeftLabel(_event(at, allDay: allDay), _today);
+
+    test('egy napon túl napokban', () {
+      expect(left(DateTime(2026, 7, 25, 10)), '3 nap múlva');
+      // Kerek napokra csonkít: 2 nap 23 óra még „2 nap múlva".
+      expect(left(DateTime(2026, 7, 25, 9)), '2 nap múlva');
+    });
+
+    test('egy napon belül órákban', () {
+      expect(left(DateTime(2026, 7, 22, 18)), '8 óra múlva');
+      expect(left(DateTime(2026, 7, 23, 9, 59)), '23 óra múlva');
+    });
+
+    test('egy órán belül percekben, a kezdésnél szöveggel', () {
+      expect(left(DateTime(2026, 7, 22, 10, 30)), '30 perc múlva');
+      expect(left(_today), 'Most kezdődik');
+    });
+
+    test('a már elkezdődött eseményhez nincs mit visszaszámolni', () {
+      expect(left(DateTime(2026, 7, 22, 9)), isNull);
+    });
+
+    test('az egész napos a naptári napok különbségét mutatja', () {
+      // Nem a holnap éjfélig hátralévő 14 óra, hanem „1 nap múlva".
+      expect(left(DateTime(2026, 7, 23), allDay: true), '1 nap múlva');
+      expect(left(DateTime(2026, 7, 22), allDay: true), isNull);
+    });
+  });
+
   group('nowMarkerIndex', () {
     test('üres nap: a vonal a végén (nulladik) helyen áll', () {
       expect(nowMarkerIndex(const [], _today), 0);
