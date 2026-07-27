@@ -108,6 +108,16 @@ const guideTopics = <GuideTopic>[
         'visszaállnak. A naptáresemények magán a készüléken maradnak.',
   ),
   GuideTopic(
+    icon: Icons.import_export,
+    title: 'Import és export',
+    body:
+        'A Beállítások → Adatok alatt CSV-fájlból importálhatsz eseményeket — '
+        'akár egy másik naptáralkalmazás mentéséből. Ami már szerepel a '
+        'naptáradban, azt kihagyjuk, az újak a Google-naptáradba kerülnek, '
+        'onnan a felhőbe is. Exportnál a bekapcsolt naptáraidból készül egy '
+        'fájl, amit rögtön küldhetsz e-mailben, üzenetben vagy Bluetooth-on.',
+  ),
+  GuideTopic(
     icon: Icons.help_outline,
     title: 'Ezt bármikor újranézheted',
     body:

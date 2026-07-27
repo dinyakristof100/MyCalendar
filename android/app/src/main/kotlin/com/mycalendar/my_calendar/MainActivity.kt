@@ -3,15 +3,18 @@ package com.mycalendar.my_calendar
 import android.Manifest
 import android.content.ContentUris
 import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.CalendarContract
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.util.TimeZone
 
 /**
@@ -33,6 +36,10 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val CHANNEL = "mycalendar/device_calendar"
         const val PERMISSION_REQUEST = 1001
+        const val PICK_FILE_REQUEST = 1002
+
+        /** A megosztott mentések helye a gyorsítótárban — lásd `res/xml/file_paths.xml`. */
+        const val EXPORT_DIR = "export"
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -46,6 +53,8 @@ class MainActivity : FlutterActivity() {
                     "createEvent" -> handleCreateEvent(call, result)
                     "updateEvent" -> handleUpdateEvent(call, result)
                     "deleteEvent" -> handleDeleteEvent(call, result)
+                    "pickTextFile" -> handlePickTextFile(result)
+                    "shareTextFile" -> handleShareTextFile(call, result)
                     "versionCode" -> result.success(currentVersionCode())
                     else -> result.notImplemented()
                 }
@@ -154,6 +163,10 @@ class MainActivity : FlutterActivity() {
      * érvénytelen adat): a hosszt a kapott intervallumból számoljuk, egész
      * naposra a napalapú `P1D` kell. A DTEND-et kifejezetten nullázzuk, mert a
      * módosítást a provider a sor meglévő mezőivel együtt ellenőrzi.
+     *
+     * A leírás és a hely csak akkor íródik, ha a hívó küldte — az importált
+     * mentésnél van mit beletenni. A szerkesztés nem küldi őket, így egy meglévő
+     * esemény leírását nem törli le.
      */
     private fun eventValues(call: MethodCall): ContentValues {
         val allDay = call.argument<Boolean>("allDay") == true
@@ -176,6 +189,12 @@ class MainActivity : FlutterActivity() {
                 )
             }
             put(CalendarContract.Events.ALL_DAY, if (allDay) 1 else 0)
+            call.argument<String>("description")?.let {
+                put(CalendarContract.Events.DESCRIPTION, it)
+            }
+            call.argument<String>("location")?.let {
+                put(CalendarContract.Events.EVENT_LOCATION, it)
+            }
             // Kötelező mező: enélkül a beszúrás kivételt dob.
             put(
                 CalendarContract.Events.EVENT_TIMEZONE,
@@ -279,6 +298,96 @@ class MainActivity : FlutterActivity() {
             if (cursor.moveToFirst()) return cursor.getLong(0)
         }
         return null
+    }
+
+    /**
+     * A folyamatban lévő fájlválasztás Dart-oldali válasza. A rendszer
+     * választóablaka külön activity, az eredménye [onActivityResult]-ban jön —
+     * addig itt vár a `result`.
+     */
+    private var pendingPick: MethodChannel.Result? = null
+
+    /**
+     * A rendszer fájlválasztójának megnyitása, és a választott fájl tartalmának
+     * visszaadása szövegként. Elvetéskor `null`.
+     *
+     * A típusszűrő szándékosan `* / *`: a `.csv`-t sok fájlkezelő és letöltés
+     * `application/octet-stream`-ként tartja nyilván, a szűkebb `text/csv`
+     * ezeknél elrejtené a keresett fájlt. Nem kér tárhely-engedélyt: az
+     * `ACTION_OPEN_DOCUMENT` a rendszer választóján át ad hozzáférést.
+     */
+    private fun handlePickTextFile(result: MethodChannel.Result) {
+        if (pendingPick != null) {
+            result.error("PICK_BUSY", "Már fut egy fájlválasztás.", null)
+            return
+        }
+        try {
+            pendingPick = result
+            startActivityForResult(
+                Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                },
+                PICK_FILE_REQUEST,
+            )
+        } catch (e: Exception) {
+            pendingPick = null
+            result.error("PICK_FAILED", e.message, null)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_FILE_REQUEST) return
+        // A `pendingPick` kinullázása AZONNAL: bármelyik ág fut le, a következő
+        // választás indulhasson.
+        val result = pendingPick ?: return
+        pendingPick = null
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) {
+            result.success(null) // mégsem
+            return
+        }
+        try {
+            val text = contentResolver.openInputStream(uri)
+                ?.bufferedReader()
+                ?.use { it.readText() }
+                ?: error("A fájl nem olvasható.")
+            result.success(text)
+        } catch (e: Exception) {
+            result.error("READ_FAILED", e.message, null)
+        }
+    }
+
+    /**
+     * A kapott szöveg fájlba írása és kiajánlása a rendszer megosztó-ablakának
+     * (e-mail, üzenet, Bluetooth, felhő — ami a telefonon van).
+     *
+     * A fájl a gyorsítótárba kerül, és `FileProvider`-en át kap ideiglenes
+     * olvasási jogot: `file://` URI-t az Android N óta nem fogad el más app.
+     * Takarítani nem kell, a gyorsítótárat a rendszer üríti.
+     */
+    private fun handleShareTextFile(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            val name = call.argument<String>("name")!!
+            val file = File(File(cacheDir, EXPORT_DIR).apply { mkdirs() }, name)
+            file.writeText(call.argument<String>("content")!!)
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            startActivity(
+                Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = "text/csv"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        putExtra(Intent.EXTRA_SUBJECT, name)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    },
+                    "Naptármentés küldése",
+                ),
+            )
+            result.success(null)
+        } catch (e: Exception) {
+            result.error("SHARE_FAILED", e.message, null)
+        }
     }
 
     /** A telepített APK versionCode-ja — a Dart oldal ezt hasonlítja a GitHub

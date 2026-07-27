@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A megosztható fájlok: csak az exportált naptármentések a gyorsítótárból.
+     A FileProvider ennél többet nem enged ki az app fájljaiból. -->
+<paths>
+    <cache-path name="export" path="export/"/>
+</paths>

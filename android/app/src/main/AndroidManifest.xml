@@ -82,6 +82,20 @@
                 <action android:name="${applicationId}.ACTION_INSTALL_COMPLETE"/>
             </intent-filter>
         </receiver>
+
+        <!-- Az exportált naptármentés kiküldése: az Android N óta `file://`
+             URI-t nem fogad el más app, ezért a fájl ezen a providerén át kap
+             ideiglenes olvasási jogot. Csak a gyorsítótár export mappáját
+             engedi ki (res/xml/file_paths.xml). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

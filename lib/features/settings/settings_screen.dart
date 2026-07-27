@@ -9,6 +9,7 @@ import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
 import '../auth/auth_controller.dart';
 import '../workouts/workout_progress.dart';
+import 'import_export.dart';
 import 'wallpaper.dart';
 
 const _key = 'themeMode';
@@ -224,6 +225,9 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/calendars'),
           ),
+          const Divider(height: 24),
+          const _SectionTitle('Adatok'),
+          const ImportExportTiles(),
           const Divider(height: 24),
           const _SectionTitle('Edzés'),
           SwitchListTile(

@@ -69,6 +69,9 @@ String? rruleFor(Recurrence recurrence, DateTime start) => switch (recurrence) {
 /// [calendarId] a célnaptár (lásd [writeTargetId]) — enélkül a natív oldal
 /// választ egy írható naptárat, ami több fióknál nem biztos, hogy a miénk.
 ///
+/// [description] és [location] az importnak kell: a mentésfájl jegyzet- és
+/// hely-oszlopa így nem vész el. Az app saját űrlapja nem tölti ki őket.
+///
 /// A hívó dolga frissíteni a listát — az `upcomingEventsProvider`
 /// érvénytelenítése az emlékeztetőket is újraütemezi.
 Future<String?> createEvent({
@@ -78,12 +81,16 @@ Future<String?> createEvent({
   bool allDay = false,
   String? rrule,
   int? calendarId,
+  String? description,
+  String? location,
 }) => _channel.invokeMethod<String>('createEvent', {
   'title': title,
   // Null-aware kulcs: nem ismétlődőnél a kulcs is elmarad — a natív oldal ezt
   // veszi „nem sorozat"-nak.
   'rrule': ?rrule,
   'calendarId': ?calendarId,
+  'description': ?description,
+  'location': ?location,
   ..._when(start, end, allDay),
 });
 
@@ -371,7 +378,7 @@ List<int> visibleCalendarIds(
 ///
 /// Üres lista: nincs bekapcsolt naptár — ilyenkor a hívó meg se kérdezi a
 /// naptárat. (A natív oldal az üres listát „nincs szűrő"-nek venné.)
-Future<List<int>> _calendarFilter(Ref ref) async {
+final visibleCalendarIdsProvider = FutureProvider<List<int>>((ref) async {
   // A watch-ok az await ELŐTT: utána a provider már nem venné fel a függőséget.
   final chosen = ref.watch(visibleCalendarsProvider);
   final email = ref.watch(currentUserProvider).value?.email;
@@ -380,7 +387,12 @@ Future<List<int>> _calendarFilter(Ref ref) async {
     calendars,
     chosen ?? defaultVisible(calendars, email),
   );
-}
+});
+
+List<CalendarEvent> _parseAll(List<Object?>? raw) => [
+  for (final event in raw ?? const <Object?>[])
+    parseEvent((event! as Map).cast<String, Object?>()),
+];
 
 /// A natív lekérdezés + a szűrő + a nyers map-ek átalakítása egy helyen.
 Future<List<CalendarEvent>> _queryEvents(
@@ -388,18 +400,34 @@ Future<List<CalendarEvent>> _queryEvents(
   String method,
   Map<String, Object?> args,
 ) async {
-  final ids = await _calendarFilter(ref);
+  final ids = await ref.watch(visibleCalendarIdsProvider.future);
   // Nincs bekapcsolt naptár: nincs mit lekérdezni.
   if (ids.isEmpty) return const [];
-  final raw = await _channel.invokeMethod<List<Object?>>(method, {
-    ...args,
-    'calendarIds': ids,
-  });
-  return [
-    for (final event in raw ?? const <Object?>[])
-      parseEvent((event! as Map).cast<String, Object?>()),
-  ];
+  return _parseAll(
+    await _channel.invokeMethod<List<Object?>>(method, {
+      ...args,
+      'calendarIds': ids,
+    }),
+  );
 }
+
+/// Egy tetszőleges `[begin, end)` ablak eseményei — a mentés exportja és az
+/// import duplikátum-ellenőrzése kéri, tehát a providerek cache-én kívülről.
+///
+/// [calendarIds] üres: nincs szűrő, a készülék MINDEN naptára. Az importnak
+/// pont ez kell (a kikapcsolt naptárban lévő esemény is létezik); az export a
+/// bekapcsolt naptárak id-jét adja át, és üres listánál meg se hívja.
+Future<List<CalendarEvent>> eventsBetween(
+  DateTime begin,
+  DateTime end, {
+  List<int> calendarIds = const [],
+}) async => _parseAll(
+  await _channel.invokeMethod<List<Object?>>('eventsInRange', {
+    'begin': begin.millisecondsSinceEpoch,
+    'end': end.millisecondsSinceEpoch,
+    if (calendarIds.isNotEmpty) 'calendarIds': calendarIds,
+  }),
+);
 
 /// A következő 14 nap eseményei az eszköz naptárából, kezdés szerint rendezve.
 ///
