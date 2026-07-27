@@ -5,22 +5,42 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cloud_sync.dart';
 import '../../core/prefs.dart';
+import '../../core/ui.dart';
 
 const _categoriesKey = 'eventCategories';
 const _assignmentsKey = 'eventCategoryAssignments';
 
 /// A választható kategóriaszínek: kézzel válogatott, jól elkülönülő árnyalatok.
+///
+/// Tompított, poros tónusok — a telített változatok egész kártyányi felületen
+/// bántóan erősek voltak. Mindegyik elég világos ahhoz, hogy [readableOn]
+/// sötét szöveget adjon rájuk, így a kártyák tipográfiája egységes marad.
 const categoryColors = [
-  Color(0xFFE11D48), // piros
-  Color(0xFFF97316), // narancs
-  Color(0xFFF59E0B), // borostyán
-  Color(0xFF16A34A), // zöld
-  Color(0xFF0EA5A0), // türkiz
-  Color(0xFF2563EB), // kék
-  Color(0xFF7C3AED), // lila
-  Color(0xFFDB2777), // rózsaszín
-  Color(0xFF64748B), // pala
+  Color(0xFFCF7A72), // piros
+  Color(0xFFE0906A), // narancs
+  Color(0xFFD8AC5E), // borostyán
+  Color(0xFF6FA97F), // zöld
+  Color(0xFF5FA8A3), // türkiz
+  Color(0xFF7392C9), // kék
+  Color(0xFF9B87C9), // lila
+  Color(0xFFCE7FA5), // rózsaszín
+  Color(0xFF8A94A6), // pala
 ];
+
+/// A régi, élénk paletta → a mostani lágy megfelelője. A már mentett
+/// kategóriák betöltéskor átveszik az új árnyalatot, különben a régi
+/// rikító színek maradnának rajtuk.
+const _softened = {
+  0xFFE11D48: 0xFFCF7A72,
+  0xFFF97316: 0xFFE0906A,
+  0xFFF59E0B: 0xFFD8AC5E,
+  0xFF16A34A: 0xFF6FA97F,
+  0xFF0EA5A0: 0xFF5FA8A3,
+  0xFF2563EB: 0xFF7392C9,
+  0xFF7C3AED: 0xFF9B87C9,
+  0xFFDB2777: 0xFFCE7FA5,
+  0xFF64748B: 0xFF8A94A6,
+};
 
 /// Egy eseménykategória: név és szín. A színt ARGB egészként tároljuk.
 class EventCategory {
@@ -40,11 +60,14 @@ class EventCategory {
     'color': color.toARGB32(),
   };
 
-  static EventCategory fromJson(Map<String, Object?> json) => EventCategory(
-    id: json['id']! as String,
-    name: json['name']! as String,
-    color: Color(json['color']! as int),
-  );
+  static EventCategory fromJson(Map<String, Object?> json) {
+    final stored = json['color']! as int;
+    return EventCategory(
+      id: json['id']! as String,
+      name: json['name']! as String,
+      color: Color(_softened[stored] ?? stored),
+    );
+  }
 }
 
 /// A kategóriák és az esemény→kategória hozzárendelések együtt.
@@ -462,7 +485,7 @@ class _CategoryDialogState extends ConsumerState<_CategoryDialog> {
                       ),
                     ),
                     child: _color == color
-                        ? const Icon(Icons.check, color: Colors.white, size: 18)
+                        ? Icon(Icons.check, color: readableOn(color), size: 18)
                         : null,
                   ),
                 ),
