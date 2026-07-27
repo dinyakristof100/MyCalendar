@@ -57,6 +57,17 @@ const guideTopics = <GuideTopic>[
         'Beállítások → Értesítések alatt külön-külön ki is kapcsolhatod.',
   ),
   GuideTopic(
+    icon: Icons.group_outlined,
+    title: 'Közös esemény másokkal',
+    body:
+        'Új eseménynél a „Meghívottak” mezőbe beírhatod mások e-mail címét — '
+        'többet is, vesszővel. A mentés ilyenkor a telefon Naptár '
+        'alkalmazásában fejeződik be: az küldi ki a meghívót, amit a másik fél '
+        'elfogadhat vagy elutasíthat. Ha elfogadta, ugyanaz az esemény jelenik '
+        'meg nála is, és amit bármelyikőtök módosít, azt a többiek is látják. '
+        'Ki mit válaszolt, az esemény részleteinél olvasható.',
+  ),
+  GuideTopic(
     icon: Icons.calendar_month_outlined,
     title: 'Naptár: a hónap egyben',
     body:

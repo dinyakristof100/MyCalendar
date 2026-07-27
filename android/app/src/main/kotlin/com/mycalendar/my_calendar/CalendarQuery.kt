@@ -54,6 +54,55 @@ fun ContentResolver.queryCalendars(): List<Map<String, Any?>> {
 }
 
 /**
+ * Egy esemény meghívottai: kit hívtak meg, és mit válaszolt.
+ *
+ * A válasz szövegként megy át (nem `ATTENDEE_STATUS` számként) — így a Dart
+ * oldalon nem kell a provider számkódjait duplikálni.
+ *
+ * Csak olvasási engedély kell hozzá, hálózat nem: a meghívottak válaszát a
+ * Google szinkron tartja frissen ebben a táblában.
+ */
+fun ContentResolver.queryAttendees(eventId: Long): List<Map<String, Any?>> {
+    val projection = arrayOf(
+        CalendarContract.Attendees.ATTENDEE_NAME,
+        CalendarContract.Attendees.ATTENDEE_EMAIL,
+        CalendarContract.Attendees.ATTENDEE_STATUS,
+        CalendarContract.Attendees.ATTENDEE_RELATIONSHIP,
+    )
+    val guests = mutableListOf<Map<String, Any?>>()
+    query(
+        CalendarContract.Attendees.CONTENT_URI,
+        projection,
+        "${CalendarContract.Attendees.EVENT_ID} = ?",
+        arrayOf(eventId.toString()),
+        null,
+    )?.use { cursor ->
+        while (cursor.moveToNext()) {
+            guests.add(
+                mapOf(
+                    "name" to cursor.getString(0),
+                    "email" to cursor.getString(1),
+                    "status" to attendeeStatus(cursor.getInt(2)),
+                    "organizer" to (
+                        cursor.getInt(3) ==
+                            CalendarContract.Attendees.RELATIONSHIP_ORGANIZER
+                        ),
+                ),
+            )
+        }
+    }
+    return guests
+}
+
+/** A meghívott válasza szövegesen. Ami nem ismerhető fel, az „nem válaszolt". */
+private fun attendeeStatus(status: Int): String = when (status) {
+    CalendarContract.Attendees.ATTENDEE_STATUS_ACCEPTED -> "accepted"
+    CalendarContract.Attendees.ATTENDEE_STATUS_DECLINED -> "declined"
+    CalendarContract.Attendees.ATTENDEE_STATUS_TENTATIVE -> "tentative"
+    else -> "pending"
+}
+
+/**
  * Az `Instances` tábla a [begin, end) ablakra. Ez a tábla az ismétlődő
  * eseményeket már előfordulásokra bontva adja vissza — pont, ami az
  * emlékeztetőkhöz és a naptárnézethez kell.

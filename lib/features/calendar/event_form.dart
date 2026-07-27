@@ -38,6 +38,11 @@ class _EventForm extends ConsumerStatefulWidget {
 class _EventFormState extends ConsumerState<_EventForm> {
   final _title = TextEditingController();
 
+  /// A meghívottak e-mail címei egy mezőben (lásd [parseGuestEmails]). Csak új
+  /// eseménynél: meglévőhöz vendéget a Naptárban lehet hívni, mert a meghívó
+  /// kiküldése nem a mi dolgunk.
+  final _guests = TextEditingController();
+
   late DateTime _start;
   late DateTime _end;
 
@@ -91,6 +96,7 @@ class _EventFormState extends ConsumerState<_EventForm> {
   @override
   void dispose() {
     _title.dispose();
+    _guests.dispose();
     super.dispose();
   }
 
@@ -186,6 +192,19 @@ class _EventFormState extends ConsumerState<_EventForm> {
           rrule: editing.rrule,
         );
         await categories.assign(editing.id, categoryId);
+      } else if (parseGuestEmails(_guests.text) case final guests
+          when guests.isNotEmpty) {
+        // Meghívottakkal a Naptár szerkesztője veszi át — ő küldi a meghívót.
+        // Nem kapunk vissza azonosítót, tehát kategóriát sem tudunk kötni rá; a
+        // részletek lapján utólag megadható.
+        await createEventWithGuests(
+          title: title,
+          start: _start,
+          end: _end,
+          allDay: _allDay,
+          rrule: rruleFor(_recurrence, _start),
+          guests: guests,
+        );
       } else {
         final id = await createEvent(
           title: title,
@@ -268,7 +287,8 @@ class _EventFormState extends ConsumerState<_EventForm> {
               // Az id a sorozat sora, nem az előfordulásé: a mentés minden
               // előfordulást átír. Ezt előre kell tudni, ezért van legfelül.
               if (widget.editing?.recurring ?? false) ...[
-                _Warning(
+                const _Warning(
+                  icon: Icons.repeat_rounded,
                   text:
                       'Ismétlődő esemény: a módosítás a sorozat minden '
                       'előfordulására érvényes, és a sorozat kezdete erre a '
@@ -428,6 +448,39 @@ class _EventFormState extends ConsumerState<_EventForm> {
                       ),
                   ],
                 ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _guests,
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  // A figyelmeztető sáv megjelenése a mező tartalmán múlik.
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    labelText: 'Meghívottak',
+                    hintText: 'anna@pelda.hu, bela@pelda.hu',
+                    prefixIcon: const Icon(Icons.group_outlined),
+                    filled: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                // Csak akkor szólunk, ha tényleg lesz meghívott: a mentés
+                // ilyenkor a Naptár szerkesztőjében folytatódik, ami látható
+                // váltás — ne érje váratlanul a felhasználót.
+                if (parseGuestEmails(_guests.text).isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const _Warning(
+                    icon: Icons.group_outlined,
+                    text:
+                        'Meghívottakkal a mentés a telefon Naptár '
+                        'alkalmazásában fejeződik be — a meghívót az küldi ki. '
+                        'Ott érdemes bekapcsolva hagyni, hogy a meghívottak '
+                        'szerkeszthessék az eseményt: így mindenki '
+                        'módosításait látni fogod.',
+                  ),
+                ],
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -467,10 +520,11 @@ const _recurrenceLabels = {
   Recurrence.yearly: 'Évente',
 };
 
-/// Figyelmeztető sáv — most egy helyen kell, a sorozat-szerkesztésnél.
+/// Figyelmeztető sáv: a sorozat-szerkesztésnél és a meghívottas mentésnél.
 class _Warning extends StatelessWidget {
-  const _Warning({required this.text});
+  const _Warning({required this.icon, required this.text});
 
+  final IconData icon;
   final String text;
 
   @override
@@ -486,7 +540,7 @@ class _Warning extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.repeat_rounded, size: 20, color: color),
+          Icon(icon, size: 20, color: color),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

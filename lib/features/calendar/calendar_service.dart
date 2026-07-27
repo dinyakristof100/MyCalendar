@@ -120,6 +120,98 @@ Future<void> updateEvent({
 Future<void> deleteEvent(String id) =>
     _channel.invokeMethod<void>('deleteEvent', {'id': id});
 
+/// A meghívottak mezőjének feldolgozása: vesszővel, pontosvesszővel vagy
+/// szóközzel elválasztott e-mail címek. A `@` nélküli darabokat és az
+/// ismétlődéseket eldobja, a sorrendet megtartja.
+///
+/// Kisbetűsít: így az „Anna@pelda.hu" és az „anna@pelda.hu" egy meghívott — a
+/// Google is egynek veszi őket.
+///
+/// ponytail: nincs igazi cím-validálás. A valódi visszajelzést (létező-e a cím,
+/// megy-e a meghívó) a Naptár adja, ahol a mentés történik — egy saját regex
+/// legfeljebb érvényes címeket utasítana el tévesen.
+List<String> parseGuestEmails(String input) => {
+  for (final part in input.split(RegExp(r'[,;\s]+')))
+    if (part.contains('@')) part.toLowerCase(),
+}.toList();
+
+/// Új esemény a naptáralkalmazás saját szerkesztőjében, előre kitöltve, a
+/// megadott meghívottakkal (lásd `MainActivity.handleCreateEventWithGuests`).
+///
+/// A meghívó kiküldése, az elfogadás/elutasítás és a módosítások szétosztása a
+/// Google szinkron dolga — ezért nem mi írjuk be az eseményt. A mentést a
+/// felhasználó a Naptárban nyomja meg, így nincs visszatérő azonosító: a hívó
+/// nem tud kategóriát kötni rá, és nem is tudhatja biztosan, hogy létrejött-e.
+Future<void> createEventWithGuests({
+  required String title,
+  required DateTime start,
+  required DateTime end,
+  required List<String> guests,
+  bool allDay = false,
+  String? rrule,
+}) => _channel.invokeMethod<void>('createEventWithGuests', {
+  'title': title,
+  'guests': guests.join(','),
+  'rrule': ?rrule,
+  ..._when(start, end, allDay),
+});
+
+/// A meghívott válasza. A `pending` gyűjti a „meghívtuk, de nem válaszolt" és a
+/// hiányzó státuszt is — a felhasználónak ez ugyanaz az információ.
+enum GuestStatus { accepted, declined, tentative, pending }
+
+String guestStatusLabel(GuestStatus status) => switch (status) {
+  GuestStatus.accepted => 'elfogadta',
+  GuestStatus.declined => 'elutasította',
+  GuestStatus.tentative => 'talán',
+  GuestStatus.pending => 'még nem válaszolt',
+};
+
+/// Egy meghívott és a válasza.
+class EventGuest {
+  const EventGuest({
+    required this.label,
+    required this.status,
+    required this.organizer,
+  });
+
+  /// Amit kiírunk: a név, ha a naptár tudja, egyébként az e-mail cím.
+  final String label;
+  final GuestStatus status;
+
+  /// A szervező — ő hívta össze az eseményt, nem „válaszol" rá.
+  final bool organizer;
+}
+
+EventGuest parseGuest(Map<String, Object?> raw) => EventGuest(
+  label: _text(raw['name']) ?? _text(raw['email']) ?? '(ismeretlen)',
+  status: switch (raw['status']) {
+    'accepted' => GuestStatus.accepted,
+    'declined' => GuestStatus.declined,
+    'tentative' => GuestStatus.tentative,
+    _ => GuestStatus.pending,
+  },
+  organizer: raw['organizer'] == true,
+);
+
+/// Egy esemény meghívottai. Megosztás nélküli eseménynél üres vagy egyelemű (csak
+/// a szervező) — a részletek lapja ezért csak kettőtől mutatja.
+///
+/// Családi provider: minden esemény a saját id-jével kéri, és a részletek lapja
+/// csak arra az egyre fizet lekérdezést, amit épp megnyitottak.
+final eventGuestsProvider = FutureProvider.family<List<EventGuest>, String>((
+  ref,
+  eventId,
+) async {
+  final raw = await _channel.invokeMethod<List<Object?>>('attendees', {
+    'id': eventId,
+  });
+  return [
+    for (final guest in raw ?? const <Object?>[])
+      parseGuest((guest! as Map).cast<String, Object?>()),
+  ];
+});
+
 /// Egy naptáresemény annyi mezővel, amennyit az app tényleg használ.
 class CalendarEvent {
   const CalendarEvent({

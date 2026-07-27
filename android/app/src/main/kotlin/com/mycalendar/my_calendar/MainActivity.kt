@@ -1,6 +1,7 @@
 package com.mycalendar.my_calendar
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Intent
@@ -51,6 +52,8 @@ class MainActivity : FlutterActivity() {
                     "eventsInRange" -> handleEventsInRange(call, result)
                     "calendars" -> handleCalendars(result)
                     "createEvent" -> handleCreateEvent(call, result)
+                    "createEventWithGuests" -> handleCreateEventWithGuests(call, result)
+                    "attendees" -> handleAttendees(call, result)
                     "updateEvent" -> handleUpdateEvent(call, result)
                     "deleteEvent" -> handleDeleteEvent(call, result)
                     "pickTextFile" -> handlePickTextFile(result)
@@ -214,6 +217,72 @@ class MainActivity : FlutterActivity() {
             result.success(id)
         } catch (e: Exception) {
             result.error("INSERT_FAILED", e.message, null)
+        }
+    }
+
+    /**
+     * Meghívottas esemény: a naptáralkalmazás saját szerkesztőjét nyitjuk meg
+     * előre kitöltve — NEM mi írjuk be az eseményt.
+     *
+     * Miért nem magunk? A meghívó kiküldése és a válaszok begyűjtése a Google
+     * szinkron dolga. A `CalendarContract.Attendees` táblába közvetlenül beírt
+     * vendég verziófüggően nem kap értesítést; a dokumentált út az
+     * `ACTION_INSERT` + `EXTRA_EMAIL`, amit maga a Naptár küld tovább. Ezért
+     * naptár-engedély sem kell hozzá: a beírást a Naptár végzi.
+     *
+     * A mentést a felhasználó ott nyomja meg, tehát nincs visszatérő
+     * esemény-azonosító (a kategória-hozzárendelés így kimarad), és a célnaptárat
+     * is a Naptár választja — jellemzően a fiók elsődleges naptára, ami itt épp a
+     * kívánt cél. A lista magától frissül, amikor a felhasználó visszatér az
+     * appba (lásd `AppLifecycleListener` az events_screen-ben).
+     *
+     * Az időargumentumok ugyanazok, mint a beszúrásnál (lásd `eventValues`):
+     * egész naposnál UTC éjfél — a Naptár szerkesztője is így értelmezi.
+     */
+    private fun handleCreateEventWithGuests(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            val intent = Intent(Intent.ACTION_INSERT)
+                .setData(CalendarContract.Events.CONTENT_URI)
+                .putExtra(CalendarContract.Events.TITLE, call.argument<String>("title"))
+                .putExtra(Intent.EXTRA_EMAIL, call.argument<String>("guests"))
+                .putExtra(
+                    CalendarContract.EXTRA_EVENT_BEGIN_TIME,
+                    call.argument<Number>("begin")!!.toLong(),
+                )
+                .putExtra(
+                    CalendarContract.EXTRA_EVENT_END_TIME,
+                    call.argument<Number>("end")!!.toLong(),
+                )
+                .putExtra(
+                    CalendarContract.EXTRA_EVENT_ALL_DAY,
+                    call.argument<Boolean>("allDay") == true,
+                )
+                // ponytail: nem dokumentált extra, csak jobb esetben veszi
+                // figyelembe a Naptár. Ha nem, a felhasználó ugyanazon a
+                // szerkesztőn belül egy kapcsolóval adja meg — a Dart oldal
+                // ezért írja ki, hogy ezt ott érdemes ellenőrizni.
+                .putExtra(CalendarContract.Events.GUESTS_CAN_MODIFY, true)
+            call.argument<String>("rrule")?.let {
+                intent.putExtra(CalendarContract.Events.RRULE, it)
+            }
+            startActivity(intent)
+            result.success(null)
+        } catch (e: ActivityNotFoundException) {
+            result.error("NO_CALENDAR_APP", "Nincs naptáralkalmazás a készüléken.", null)
+        } catch (e: Exception) {
+            result.error("INSERT_FAILED", e.message, null)
+        }
+    }
+
+    /** Egy esemény meghívottai és a válaszuk — a részletek lapja mutatja. */
+    private fun handleAttendees(call: MethodCall, result: MethodChannel.Result) {
+        if (!ensureReadPermission(result)) return
+        try {
+            result.success(
+                contentResolver.queryAttendees(call.argument<String>("id")!!.toLong()),
+            )
+        } catch (e: Exception) {
+            result.error("QUERY_FAILED", e.message, null)
         }
     }
 

@@ -32,6 +32,10 @@ class _EventDetails extends ConsumerWidget {
     final time = formatTime(event);
     final end = event.end;
     final category = ref.watch(categoriesProvider).of(event.id);
+    // Betöltés vagy hiba (nincs engedély) alatt üres: a meghívottak listája
+    // sosem lehet oka annak, hogy a részletek ne jelenjenek meg.
+    final guests =
+        ref.watch(eventGuestsProvider(event.id)).value ?? const <EventGuest>[];
 
     return SafeArea(
       child: ConstrainedBox(
@@ -85,6 +89,13 @@ class _EventDetails extends ConsumerWidget {
                 _Detail(icon: Icons.place_outlined, text: location),
               if (event.description case final description?)
                 _Detail(icon: Icons.notes_outlined, text: description),
+              // Egyetlen résztvevő = csak a szervező, vagyis nincs kivel
+              // megosztva. Így nem kell tudnunk, melyik cím a miénk.
+              if (guests.length > 1)
+                _Detail(
+                  icon: Icons.group_outlined,
+                  text: guests.map(_guestLine).join('\n'),
+                ),
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -179,6 +190,12 @@ class _EventDetails extends ConsumerWidget {
     ref.invalidate(monthEventsProvider);
   }
 }
+
+/// Egy meghívott sora: „Anna – elfogadta". A szervező nem válaszol a saját
+/// eseményére, őt csak megjelöljük.
+String _guestLine(EventGuest guest) => guest.organizer
+    ? '${guest.label} (szervező)'
+    : '${guest.label} – ${guestStatusLabel(guest.status)}';
 
 /// A kategória kiválasztható „csipesze". Kategória nélkül felkínálja a
 /// hozzáadást; kategóriával a színt és a nevet mutatja, koppintásra átállítható.
