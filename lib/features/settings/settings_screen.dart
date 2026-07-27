@@ -13,6 +13,29 @@ import 'import_export.dart';
 import 'wallpaper.dart';
 
 const _key = 'themeMode';
+const _timeKeyboardKey = 'timePickerKeyboard';
+
+/// Billentyűzettel (számbeírás) induljon-e az esemény időválasztója a grafikus
+/// óra helyett.
+///
+/// Alapból igen: egy időpont beírása két koppintás, a mutatók tekergetése
+/// ennél mindig lassabb. A rendszer időválasztójában amúgy is ott a váltógomb —
+/// ez csak azt dönti el, melyik móddal NYÍLIK.
+final timeKeyboardProvider = NotifierProvider<TimeKeyboardController, bool>(
+  TimeKeyboardController.new,
+);
+
+class TimeKeyboardController extends Notifier<bool> {
+  @override
+  // Hiányzó beállítás = az alapértelmezés; csak a kifejezett „false" kapcsol
+  // vissza az órára.
+  bool build() => prefs.getString(_timeKeyboardKey) != 'false';
+
+  Future<void> set(bool on) async {
+    state = on;
+    await saveSetting(_timeKeyboardKey, on ? 'true' : 'false');
+  }
+}
 
 /// A klasszikus három mód akcentje — ugyanez az indigó van az ikonban és a
 /// webes oldalakon.
@@ -213,6 +236,19 @@ class SettingsScreen extends ConsumerWidget {
           const Divider(height: 24),
           const _SectionTitle('Háttérkép'),
           const _WallpaperTile(),
+          const Divider(height: 24),
+          const _SectionTitle('Események'),
+          SwitchListTile(
+            secondary: const Icon(Icons.keyboard_outlined),
+            title: const Text('Időpont beírása billentyűzettel'),
+            subtitle: const Text(
+              'Az esemény óráját és percét gépelve add meg. Kikapcsolva a '
+              'grafikus óra nyílik — a választón belül amúgy is válthatsz a '
+              'kettő között.',
+            ),
+            value: ref.watch(timeKeyboardProvider),
+            onChanged: (on) => ref.read(timeKeyboardProvider.notifier).set(on),
+          ),
           const Divider(height: 24),
           const _SectionTitle('Naptárak'),
           ListTile(

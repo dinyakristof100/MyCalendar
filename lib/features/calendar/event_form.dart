@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_controller.dart';
+import '../settings/settings_screen.dart';
 import 'calendar_service.dart';
 import 'event_categories.dart';
 import 'event_groups.dart';
@@ -142,6 +143,11 @@ class _EventFormState extends ConsumerState<_EventForm> {
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(current),
+      // Beállításban választható, hogy gépelve vagy a mutatókat húzva induljon
+      // (a választón belül a felhasználó így is válthat).
+      initialEntryMode: ref.read(timeKeyboardProvider)
+          ? TimePickerEntryMode.input
+          : TimePickerEntryMode.dial,
     );
     if (time == null) return;
     final picked = DateTime(
@@ -340,52 +346,52 @@ class _EventFormState extends ConsumerState<_EventForm> {
                           onTime: () => _pickTime(end: false),
                         ),
                         Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Divider(
-                                height: 1,
-                                color: scheme.outlineVariant.withValues(
-                                  alpha: 0.6,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Divider(
+                                  height: 1,
+                                  color: scheme.outlineVariant.withValues(
+                                    alpha: 0.6,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.hourglass_bottom_rounded,
-                                    size: 14,
-                                    color: scheme.onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    _durationLabel(_end.difference(_start)),
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                          color: scheme.onSurfaceVariant,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Expanded(
-                              child: Divider(
-                                height: 1,
-                                color: scheme.outlineVariant.withValues(
-                                  alpha: 0.6,
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.hourglass_bottom_rounded,
+                                      size: 14,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _durationLabel(_end.difference(_start)),
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                            color: scheme.onSurfaceVariant,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ),
-                          ],
+                              Expanded(
+                                child: Divider(
+                                  height: 1,
+                                  color: scheme.outlineVariant.withValues(
+                                    alpha: 0.6,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                         _WhenRow(
                           label: 'Vége',
                           value: _end,

@@ -50,8 +50,10 @@ const guideTopics = <GuideTopic>[
     body:
         'A jobb alsó + gombbal. Add meg a címet, a kezdést és a véget, és '
         'rögtön kategóriát is választhatsz hozzá — nem kell utólag megnyitni. '
-        'A mentés a telefonod naptárába írja az eseményt, és emlékeztetőt is '
-        'kapsz róla: egy nappal és egy órával előtte.',
+        'Az órát alapból begépeled; ha inkább a grafikus órát tekernéd, a '
+        'Beállítások → Események alatt átkapcsolhatod. A mentés a telefonod '
+        'naptárába írja az eseményt, és emlékeztetőt is kapsz róla: egy '
+        'nappal és egy órával előtte.',
   ),
   GuideTopic(
     icon: Icons.calendar_month_outlined,

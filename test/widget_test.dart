@@ -10,6 +10,7 @@ import 'package:my_calendar/features/auth/auth_controller.dart';
 import 'package:my_calendar/features/calendar/calendar_service.dart';
 import 'package:my_calendar/features/calendar/event_groups.dart';
 import 'package:my_calendar/features/help/guide.dart';
+import 'package:my_calendar/features/settings/settings_screen.dart';
 import 'package:my_calendar/features/settings/wallpaper.dart';
 import 'package:my_calendar/features/workouts/motivation.dart';
 import 'package:my_calendar/core/prefs.dart';
@@ -169,6 +170,24 @@ void main() {
       ThemeMode.dark,
     );
   });
+
+  test(
+    'az időválasztó alapból billentyűzetes, és a választás megmarad',
+    () async {
+      addTearDown(() => prefs.remove('timePickerKeyboard'));
+      // Mentett érték nélkül a billentyűzetes mód az alapértelmezés.
+      final first = ProviderContainer();
+      addTearDown(first.dispose);
+      expect(first.read(timeKeyboardProvider), isTrue);
+
+      await first.read(timeKeyboardProvider.notifier).set(false);
+
+      // Új munkamenet (friss container) a mentett értéket olvassa vissza.
+      final reopened = ProviderContainer();
+      addTearDown(reopened.dispose);
+      expect(reopened.read(timeKeyboardProvider), isFalse);
+    },
+  );
 
   testWidgets('edzésterv felvitele és megjelenítése', (tester) async {
     // Magas ablak, hogy a lista minden mezője megépüljön — így nem kell
@@ -418,9 +437,13 @@ void main() {
     await tester.pumpAndSettle();
     await _goTab(tester, 'Beállítások');
 
-    // A súgó a lista alján van — előbb odagörgetünk.
+    // A súgó a lista alján van — előbb odagörgetünk. Az `ensureVisible` a
+    // teljes sort behozza: a görgetés magában a képernyő aljára is teheti,
+    // ahol a koppintás középpontja már kilóg a nézetből.
     final entry = find.text('Súgó és útmutató');
     await tester.scrollUntilVisible(entry, 400);
+    await tester.ensureVisible(entry);
+    await tester.pumpAndSettle();
     await tester.tap(entry);
     await tester.pumpAndSettle();
     // Minden téma szakaszként ott van, lenyitva a leírásával.

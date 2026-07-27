@@ -19,6 +19,7 @@ import 'prefs.dart';
 /// szinkronizált beállítás bekerülésekor csak ide kell felvenni a kulcsot.
 const syncedKeys = <String>[
   'themeMode', // színkészlet
+  'timePickerKeyboard', // az időválasztó billentyűzettel nyíljon-e
   'eventCategories', // naptárkategóriák (név + szín)
   'eventCategoryAssignments', // esemény -> kategória
   // A bekapcsolt eszköz-naptárak. A kulcs fiók+név, nem naptár-id: az id
@@ -64,10 +65,12 @@ void _pushToCloud(Map<String, Object?> fields) {
   final doc = _cloudReady ? _userDoc() : null;
   if (doc == null) return;
   unawaited(
-    doc.set({
-      ...fields,
-      'lastActiveAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true)).catchError((_) {}),
+    doc
+        .set({
+          ...fields,
+          'lastActiveAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true))
+        .catchError((_) {}),
   );
 }
 
@@ -95,9 +98,7 @@ Future<void> pullFromCloud() async {
     }
     touchActivity();
   } else {
-    _pushToCloud({
-      for (final key in syncedKeys) key: ?prefs.getString(key),
-    });
+    _pushToCloud({for (final key in syncedKeys) key: ?prefs.getString(key)});
   }
 }
 
@@ -112,6 +113,7 @@ final cloudSyncProvider = Provider<void>((ref) {
     unawaited(
       pullFromCloud().then((_) {
         ref.invalidate(appStyleProvider);
+        ref.invalidate(timeKeyboardProvider);
         ref.invalidate(categoriesProvider);
         // A naptárszűrőt az esemény-providerek figyelik: elég ezt frissíteni,
         // a lista és a naptárnézet magától újratölt.
