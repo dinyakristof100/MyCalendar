@@ -187,7 +187,10 @@ class MainActivity : FlutterActivity() {
     private fun handleCreateEvent(call: MethodCall, result: MethodChannel.Result) {
         if (!ensureWritePermission(result)) return
         try {
-            val id = insertEvent(eventValues(call))
+            val id = insertEvent(
+                eventValues(call),
+                call.argument<Number>("calendarId")?.toLong(),
+            )
             TodayWidget.refresh(this)
             result.success(id)
         } catch (e: Exception) {
@@ -242,15 +245,18 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Beírás az elsődleges, írható naptárba.
+     * Beírás a [calendarId] naptárba — ezt a Dart oldal a bejelentkezett fiók
+     * saját naptárára állítja.
      *
-     * ponytail: nem kérdezzük meg, melyik naptárba menjen — a legtöbb
-     * készüléken egy fiók van. Naptárválasztó akkor kell, ha valakinek több
-     * írható naptára van, és számít a különbség.
+     * Enélkül (id nélküli hívás) a készülék első írható naptára jön, ami több
+     * fióknál könnyen egy MÁSIK e-mail címé: az esemény létrejön, de a
+     * bejelentkezett fiók naptárában sehol — pont ez volt a hiba.
      */
-    private fun insertEvent(values: ContentValues): String {
-        val calendarId = writableCalendarId() ?: error("Nincs írható naptár a készüléken.")
-        values.put(CalendarContract.Events.CALENDAR_ID, calendarId)
+    private fun insertEvent(values: ContentValues, calendarId: Long?): String {
+        val target = calendarId
+            ?: writableCalendarId()
+            ?: error("Nincs írható naptár a készüléken.")
+        values.put(CalendarContract.Events.CALENDAR_ID, target)
         val uri = contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
             ?: error("A naptár elutasította az eseményt.")
         return ContentUris.parseId(uri).toString()

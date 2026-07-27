@@ -8,9 +8,10 @@ import '../calendar/event_categories.dart';
 
 /// Melyik eszköz-naptár eseményei látszanak az appban.
 ///
-/// Alapból csak a bejelentkezett Google-fiók saját naptára van bekapcsolva
-/// (lásd [defaultVisible]) — a telefonon lévő többi fiók és feliratkozott naptár
-/// (ünnepnapok, sportnaptárak, munkahelyi fiók) itt kapcsolható be egyesével.
+/// Alapból a bejelentkezett Google-fiók saját naptára, az ünnepnapok, a
+/// névjegyek fontos dátumai és a MyCalendar van bekapcsolva (lásd
+/// [defaultVisible]) — a telefonon lévő többi fiók és feliratkozott naptár
+/// (sportnaptárak, munkahelyi fiók) itt kapcsolható be egyesével.
 ///
 /// A kikapcsolt naptárak a listából, a naptárnézetből és az emlékeztetőkből is
 /// kiesnek — az esemény-providerek a szűrőt figyelik, ezért a kapcsoló azonnal
@@ -81,8 +82,9 @@ class _CalendarList extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
           child: Text(
             'Csak a bepipált naptárak eseményei jelennek meg az appban. '
-            'Alapból a Google-fiókod saját naptára van bekapcsolva — a többit '
-            'itt kapcsolhatod be.',
+            'Alapból a Google-fiókod saját naptára, az ünnepnapok és a '
+            'névjegyek fontos dátumai vannak bekapcsolva — a többit itt '
+            'kapcsolhatod be.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
               height: 1.4,

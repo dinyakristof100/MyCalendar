@@ -23,7 +23,7 @@ const syncedKeys = <String>[
   'eventCategoryAssignments', // esemény -> kategória
   // A bekapcsolt eszköz-naptárak. A kulcs fiók+név, nem naptár-id: az id
   // eszközspecifikus, a fiók+név páros viszont a másik telefonon is ugyanaz.
-  'visibleCalendars',
+  'visibleCalendars2',
   'workoutPlans', // edzéstervek
   'activeWorkoutPlan', // az aktív terv
   'workoutProgress', // a hét teljesített napjai

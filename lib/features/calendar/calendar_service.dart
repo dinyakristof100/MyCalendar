@@ -66,6 +66,9 @@ String? rruleFor(Recurrence recurrence, DateTime start) => switch (recurrence) {
 ///
 /// [rrule] megadva ismétlődő sorozat jön létre (lásd [rruleFor]).
 ///
+/// [calendarId] a célnaptár (lásd [writeTargetId]) — enélkül a natív oldal
+/// választ egy írható naptárat, ami több fióknál nem biztos, hogy a miénk.
+///
 /// A hívó dolga frissíteni a listát — az `upcomingEventsProvider`
 /// érvénytelenítése az emlékeztetőket is újraütemezi.
 Future<String?> createEvent({
@@ -74,11 +77,13 @@ Future<String?> createEvent({
   required DateTime end,
   bool allDay = false,
   String? rrule,
+  int? calendarId,
 }) => _channel.invokeMethod<String>('createEvent', {
   'title': title,
   // Null-aware kulcs: nem ismétlődőnél a kulcs is elmarad — a natív oldal ezt
   // veszi „nem sorozat"-nak.
   'rrule': ?rrule,
+  'calendarId': ?calendarId,
   ..._when(start, end, allDay),
 });
 
@@ -252,7 +257,24 @@ DeviceCalendar _parseCalendar(Map<String, Object?> raw) => DeviceCalendar(
       : Color(raw['color']! as int),
 );
 
-const _visibleCalendarsKey = 'visibleCalendars';
+/// Új esemény célnaptára: a bejelentkezett fiók saját („primary") naptára —
+/// Google-fióknál ennek a neve maga az e-mail cím.
+///
+/// `null`, ha nincs ilyen (nincs bejelentkezve, vagy a fiók naptára más néven
+/// fut); ilyenkor a natív oldal keres írható naptárat. Fiók nélkül tilos
+/// tippelni: a készülék „elsődleges" naptára simán lehet egy másik fióké — a
+/// felhasználó pedig sosem látná viszont a saját eseményét.
+int? writeTargetId(List<DeviceCalendar> calendars, String? email) {
+  for (final calendar in calendars) {
+    if (calendar.account == email && calendar.name == email) return calendar.id;
+  }
+  return null;
+}
+
+/// A kulcs `2`-es: a régi mentett kiválasztás nem ismerte az alapból bekapcsolt
+/// naptárakat (lásd [_alwaysOnNames]), és a saját sorát felülírva sosem kapná
+/// meg őket. Egyszeri visszaállás az alapértelmezésre.
+const _visibleCalendarsKey = 'visibleCalendars2';
 
 /// A bekapcsolt naptárak kulcsai (lásd [DeviceCalendar.key]), vagy `null`, ha a
 /// felhasználó még nem választott — ilyenkor [defaultVisible] dönt.
@@ -280,14 +302,32 @@ class VisibleCalendarsController extends Notifier<Set<String>?> {
   }
 }
 
-/// Az alapértelmezett kiválasztás: a bejelentkezett Google-fiók saját naptára.
+/// Fióktól függetlenül, névre bekapcsolt naptárak. Ezek nélkül a naptár a
+/// legtöbb napon üresnek hatna — az ünnepnapok és a névnapok/születésnapok
+/// máshol (a Google saját, csak olvasható naptáraiban) laknak, nem a fiók
+/// „primary" naptárában.
 ///
-/// A fiók „primary" naptárának neve maga az e-mail cím — csak ez kell, az
-/// ünnepnapok- és születésnapok-naptárak nem. Ha ilyen nincs (a naptár más néven
-/// fut), a fiók összes naptára jön: jobb valamit mutatni, mint semmit. A többit
-/// a felhasználó a Beállítások → Naptárak alatt kapcsolja be.
+/// Kisbetűsítve hasonlítunk, és minden előfordulás bekapcsolódik: ugyanaz a
+/// naptár több fiók alatt is felbukkanhat.
+const _alwaysOnNames = {
+  'mycalendar',
+  'ünnepnapok - magyarország',
+  'névjegyek fontos dátumai',
+};
+
+/// Az alapértelmezett kiválasztás: a bejelentkezett Google-fiók saját naptára,
+/// plusz a névre bekapcsolt naptárak ([_alwaysOnNames]).
+///
+/// A fiók „primary" naptárának neve maga az e-mail cím. Ha ilyen nincs (a naptár
+/// más néven fut), a fiók összes naptára jön: jobb valamit mutatni, mint semmit.
+/// A többit a felhasználó a Beállítások → Naptárak alatt kapcsolja be.
 Set<String> defaultVisible(List<DeviceCalendar> calendars, String? email) {
-  if (email == null) return const {};
+  final byName = {
+    for (final calendar in calendars)
+      if (_alwaysOnNames.contains(calendar.name.trim().toLowerCase()))
+        calendar.key,
+  };
+  if (email == null) return byName;
   final mine = [
     for (final calendar in calendars)
       if (calendar.account == email) calendar,
@@ -296,7 +336,10 @@ Set<String> defaultVisible(List<DeviceCalendar> calendars, String? email) {
     for (final calendar in mine)
       if (calendar.name == calendar.account) calendar,
   ];
-  return {for (final calendar in primary.isEmpty ? mine : primary) calendar.key};
+  return {
+    ...byName,
+    for (final calendar in primary.isEmpty ? mine : primary) calendar.key,
+  };
 }
 
 /// A látszó naptárak azonosítói.

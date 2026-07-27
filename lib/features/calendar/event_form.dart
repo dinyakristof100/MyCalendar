@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth_controller.dart';
 import 'calendar_service.dart';
 import 'event_categories.dart';
 import 'event_groups.dart';
@@ -186,6 +187,14 @@ class _EventFormState extends ConsumerState<_EventForm> {
           end: _end,
           allDay: _allDay,
           rrule: rruleFor(_recurrence, _start),
+          // A bejelentkezett fiók naptárába — a natív oldal magától a készülék
+          // első írható naptárát venné, ami több fióknál másé is lehet. A
+          // naptárlistát a lista- és a naptárnézet már betöltötte; ha mégsem,
+          // marad a natív választás.
+          calendarId: writeTargetId(
+            ref.read(deviceCalendarsProvider).value ?? const [],
+            ref.read(currentUserProvider).value?.email,
+          ),
         );
         // Kategória nélkül nincs mit menteni; azonosító nélkül nincs mire.
         if (id != null && categoryId != null) {

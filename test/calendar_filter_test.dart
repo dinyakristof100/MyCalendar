@@ -41,9 +41,35 @@ void main() {
     final unnepek = _calendar(11, 'Ünnepnapok Magyarországon');
     final maseAccount = _calendar(12, 'masik@pelda.hu', account: 'masik@pelda.hu');
 
-    test('csak a bejelentkezett fiók saját naptára', () {
+    test('a bejelentkezett fiók saját naptára', () {
       final all = [sajat, unnepek, maseAccount, privat];
       expect(defaultVisible(all, 'en@pelda.hu'), {sajat.key});
+    });
+
+    test('a névre bekapcsolt naptárak minden fiók alatt', () {
+      final unnep = _calendar(20, 'Ünnepnapok - Magyarország');
+      // Ugyanaz a naptár a másik fiók alatt — ez is kell.
+      final unnepMasik = _calendar(
+        21,
+        'Ünnepnapok - Magyarország',
+        account: 'masik@pelda.hu',
+      );
+      final nevjegyek = _calendar(22, 'Névjegyek fontos dátumai');
+      final sajatNaptar = _calendar(23, 'MyCalendar', account: 'harmadik@x.hu');
+      final all = [sajat, unnep, unnepMasik, nevjegyek, sajatNaptar, privat];
+
+      expect(defaultVisible(all, 'en@pelda.hu'), {
+        sajat.key,
+        unnep.key,
+        unnepMasik.key,
+        nevjegyek.key,
+        sajatNaptar.key,
+      });
+    });
+
+    test('a névre bekapcsoltak fiók nélkül is jönnek', () {
+      final unnep = _calendar(20, 'ünnepnapok - magyarország');
+      expect(defaultVisible([unnep, privat], null), {unnep.key});
     });
 
     test('saját naptár híján a fiók összes naptára', () {
@@ -56,6 +82,20 @@ void main() {
     test('ismeretlen (vagy még be nem töltött) fiók: semmi', () {
       expect(defaultVisible(calendars, null), isEmpty);
       expect(defaultVisible(calendars, 'senki@pelda.hu'), isEmpty);
+    });
+  });
+
+  group('új esemény célnaptára', () {
+    final sajat = _calendar(10, 'en@pelda.hu');
+    final mase = _calendar(12, 'masik@pelda.hu', account: 'masik@pelda.hu');
+
+    test('a bejelentkezett fiók saját naptára', () {
+      expect(writeTargetId([mase, privat, sajat], 'en@pelda.hu'), 10);
+    });
+
+    test('másik fiók naptárába sosem ír', () {
+      expect(writeTargetId([mase, masikMunka], 'en@pelda.hu'), isNull);
+      expect(writeTargetId([mase, sajat], null), isNull);
     });
   });
 }
