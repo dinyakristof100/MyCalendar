@@ -41,9 +41,11 @@ void main() {
     final unnepek = _calendar(11, 'Ünnepnapok Magyarországon');
     final maseAccount = _calendar(12, 'masik@pelda.hu', account: 'masik@pelda.hu');
 
-    test('a bejelentkezett fiók saját naptára', () {
+    test('a bejelentkezett fiók saját naptára — a másiké nem', () {
       final all = [sajat, unnepek, maseAccount, privat];
-      expect(defaultVisible(all, 'en@pelda.hu'), {sajat.key});
+      // Az ünnepnapok neve alapján amúgy is bekapcsol; a másik fiók naptára és
+      // a fiókon belüli többi naptár viszont nem.
+      expect(defaultVisible(all, 'en@pelda.hu'), {sajat.key, unnepek.key});
     });
 
     test('a névre bekapcsolt naptárak minden fiók alatt', () {
@@ -70,6 +72,29 @@ void main() {
     test('a névre bekapcsoltak fiók nélkül is jönnek', () {
       final unnep = _calendar(20, 'ünnepnapok - magyarország');
       expect(defaultVisible([unnep, privat], null), {unnep.key});
+    });
+
+    test('a név írásmódja nem számít', () {
+      // Kötőjel, nagykötőjel, ragozott alak, extra szóköz — mind ugyanaz a
+      // naptár, csak a készülék máshogy nevezi.
+      for (final name in [
+        'Ünnepnapok - Magyarország',
+        'Ünnepnapok – Magyarország',
+        'Ünnepnapok  Magyarország',
+        'Ünnepnapok Magyarországon',
+      ]) {
+        final unnep = _calendar(30, name);
+        expect(
+          defaultVisible([unnep, privat], null),
+          {unnep.key},
+          reason: 'nem talált rá: $name',
+        );
+      }
+    });
+
+    test('másik ország ünnepnapjai nem kapcsolódnak be', () {
+      final osztrak = _calendar(31, 'Ünnepnapok - Ausztria');
+      expect(defaultVisible([osztrak, privat], null), isEmpty);
     });
 
     test('saját naptár híján a fiók összes naptára', () {

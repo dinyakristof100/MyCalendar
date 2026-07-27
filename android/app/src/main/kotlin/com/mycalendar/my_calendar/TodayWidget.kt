@@ -29,7 +29,7 @@ import java.util.Date
  * ponytail: a widget MINDEN naptárat mutat — a beállításokban kikapcsoltakat
  * is. A kiválasztás a Flutter SharedPreferences-ében él, amit innen csak a
  * `FlutterSharedPreferences` XML kulcsainak ismeretében lehetne kiolvasni. Ha
- * zavaróvá válik: a `flutter.visibleCalendars2` JSON-t kell beolvasni és a
+ * zavaróvá válik: a `flutter.visibleCalendars3` JSON-t kell beolvasni és a
  * [queryCalendars] fiók+név párosával összevetni.
  */
 class TodayWidget : AppWidgetProvider() {

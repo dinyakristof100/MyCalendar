@@ -271,10 +271,11 @@ int? writeTargetId(List<DeviceCalendar> calendars, String? email) {
   return null;
 }
 
-/// A kulcs `2`-es: a régi mentett kiválasztás nem ismerte az alapból bekapcsolt
-/// naptárakat (lásd [_alwaysOnNames]), és a saját sorát felülírva sosem kapná
-/// meg őket. Egyszeri visszaállás az alapértelmezésre.
-const _visibleCalendarsKey = 'visibleCalendars2';
+/// A kulcs sorszámozott: a mentett kiválasztás elnyomja az alapértelmezést (ez a
+/// helyes viselkedés), ezért az alapból bekapcsolt naptárak bővülésekor
+/// ([_alwaysOnNames]) a régi kulcsot elhagyjuk — különben a korábbi mentés miatt
+/// sosem kapná meg őket senki. Egyszeri visszaállás az alapértelmezésre.
+const _visibleCalendarsKey = 'visibleCalendars3';
 
 /// A bekapcsolt naptárak kulcsai (lásd [DeviceCalendar.key]), vagy `null`, ha a
 /// felhasználó még nem választott — ilyenkor [defaultVisible] dönt.
@@ -307,13 +308,26 @@ class VisibleCalendarsController extends Notifier<Set<String>?> {
 /// máshol (a Google saját, csak olvasható naptáraiban) laknak, nem a fiók
 /// „primary" naptárában.
 ///
-/// Kisbetűsítve hasonlítunk, és minden előfordulás bekapcsolódik: ugyanaz a
-/// naptár több fiók alatt is felbukkanhat.
+/// Normalizált, RÉSZLETRE menő egyezés (lásd [_alwaysOn]) — a naptárnevek
+/// írásmódja készülékenként és Google-verziónként eltér: „Ünnepnapok -
+/// Magyarország", nagykötőjellel „Ünnepnapok – Magyarország", vagy
+/// „Ünnepnapok Magyarországon". Pontos egyezésre keresve egyik sem találna.
 const _alwaysOnNames = {
   'mycalendar',
-  'ünnepnapok - magyarország',
-  'névjegyek fontos dátumai',
+  'ünnepnapokmagyarország',
+  'névjegyekfontosdátumai',
 };
+
+/// Minden, ami nem betű és nem szám — a normalizálás ezt dobja ki, így a kötőjel,
+/// a nagykötőjel és a szóközök különbsége nem számít.
+final _punctuation = RegExp(r'[^\p{L}\p{N}]', unicode: true);
+
+/// Alapból bekapcsolandó-e ez a naptár a neve alapján. Minden előfordulás
+/// bekapcsolódik: ugyanaz a naptár több fiók alatt is felbukkanhat.
+bool _alwaysOn(String name) {
+  final normalized = name.toLowerCase().replaceAll(_punctuation, '');
+  return _alwaysOnNames.any((wanted) => normalized.contains(wanted));
+}
 
 /// Az alapértelmezett kiválasztás: a bejelentkezett Google-fiók saját naptára,
 /// plusz a névre bekapcsolt naptárak ([_alwaysOnNames]).
@@ -324,8 +338,7 @@ const _alwaysOnNames = {
 Set<String> defaultVisible(List<DeviceCalendar> calendars, String? email) {
   final byName = {
     for (final calendar in calendars)
-      if (_alwaysOnNames.contains(calendar.name.trim().toLowerCase()))
-        calendar.key,
+      if (_alwaysOn(calendar.name)) calendar.key,
   };
   if (email == null) return byName;
   final mine = [
