@@ -1,7 +1,6 @@
 package com.mycalendar.my_calendar
 
 import android.Manifest
-import android.content.ActivityNotFoundException
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Intent
@@ -52,9 +51,8 @@ class MainActivity : FlutterActivity() {
                     "eventsInRange" -> handleEventsInRange(call, result)
                     "calendars" -> handleCalendars(result)
                     "createEvent" -> handleCreateEvent(call, result)
-                    "createEventWithGuests" -> handleCreateEventWithGuests(call, result)
                     "attendees" -> handleAttendees(call, result)
-                    "inviteToEvent" -> handleInviteToEvent(call, result)
+                    "addGuests" -> handleAddGuests(call, result)
                     "updateEvent" -> handleUpdateEvent(call, result)
                     "deleteEvent" -> handleDeleteEvent(call, result)
                     "pickTextFile" -> handlePickTextFile(result)
@@ -214,6 +212,7 @@ class MainActivity : FlutterActivity() {
                 eventValues(call),
                 call.argument<Number>("calendarId")?.toLong(),
             )
+            insertGuests(id.toLong(), call.guests())
             TodayWidget.refresh(this)
             result.success(id)
         } catch (e: Exception) {
@@ -221,92 +220,88 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /**
-     * Meghívottas esemény: a naptáralkalmazás saját szerkesztőjét nyitjuk meg
-     * előre kitöltve — NEM mi írjuk be az eseményt.
-     *
-     * Miért nem magunk? A meghívó kiküldése és a válaszok begyűjtése a Google
-     * szinkron dolga. A `CalendarContract.Attendees` táblába közvetlenül beírt
-     * vendég verziófüggően nem kap értesítést; a dokumentált út az
-     * `ACTION_INSERT` + `EXTRA_EMAIL`, amit maga a Naptár küld tovább. Ezért
-     * naptár-engedély sem kell hozzá: a beírást a Naptár végzi.
-     *
-     * A mentést a felhasználó ott nyomja meg, tehát nincs visszatérő
-     * esemény-azonosító (a kategória-hozzárendelés így kimarad), és a célnaptárat
-     * is a Naptár választja — jellemzően a fiók elsődleges naptára, ami itt épp a
-     * kívánt cél. A lista magától frissül, amikor a felhasználó visszatér az
-     * appba (lásd `AppLifecycleListener` az events_screen-ben).
-     *
-     * Az időargumentumok ugyanazok, mint a beszúrásnál (lásd `eventValues`):
-     * egész naposnál UTC éjfél — a Naptár szerkesztője is így értelmezi.
-     */
-    private fun handleCreateEventWithGuests(call: MethodCall, result: MethodChannel.Result) {
+    /** Meghívottak hozzáadása meglévő eseményhez — lásd [insertGuests]. */
+    private fun handleAddGuests(call: MethodCall, result: MethodChannel.Result) {
+        if (!ensureWritePermission(result)) return
         try {
-            val intent = Intent(Intent.ACTION_INSERT)
-                .setData(CalendarContract.Events.CONTENT_URI)
-                .putExtra(CalendarContract.Events.TITLE, call.argument<String>("title"))
-                .putExtra(Intent.EXTRA_EMAIL, call.argument<String>("guests"))
-                .putExtra(
-                    CalendarContract.EXTRA_EVENT_BEGIN_TIME,
-                    call.argument<Number>("begin")!!.toLong(),
-                )
-                .putExtra(
-                    CalendarContract.EXTRA_EVENT_END_TIME,
-                    call.argument<Number>("end")!!.toLong(),
-                )
-                .putExtra(
-                    CalendarContract.EXTRA_EVENT_ALL_DAY,
-                    call.argument<Boolean>("allDay") == true,
-                )
-                // ponytail: nem dokumentált extra, csak jobb esetben veszi
-                // figyelembe a Naptár. Ha nem, a felhasználó ugyanazon a
-                // szerkesztőn belül egy kapcsolóval adja meg — a Dart oldal
-                // ezért írja ki, hogy ezt ott érdemes ellenőrizni.
-                .putExtra(CalendarContract.Events.GUESTS_CAN_MODIFY, true)
-            call.argument<String>("rrule")?.let {
-                intent.putExtra(CalendarContract.Events.RRULE, it)
-            }
-            startActivity(intent)
+            insertGuests(call.argument<String>("id")!!.toLong(), call.guests())
             result.success(null)
-        } catch (e: ActivityNotFoundException) {
-            result.error("NO_CALENDAR_APP", "Nincs naptáralkalmazás a készüléken.", null)
         } catch (e: Exception) {
             result.error("INSERT_FAILED", e.message, null)
         }
     }
 
+    /** A meghívottak e-mail címei. Hiányzó kulcs = nincs meghívott. */
+    private fun MethodCall.guests(): List<String> =
+        argument<List<String>>("guests") ?: emptyList()
+
     /**
-     * Meglévő esemény megnyitása a naptáralkalmazás szerkesztőjében, hogy a
-     * felhasználó meghívottat adhasson hozzá.
+     * A meghívottak beírása az esemény mellé — közvetlenül a naptár
+     * `Attendees` táblájába, naptáralkalmazás megnyitása nélkül.
      *
-     * Itt szándékosan nincs előre kitöltött vendéglista: az `EXTRA_EMAIL` csak az
-     * `ACTION_INSERT`-nél dokumentált, `ACTION_EDIT`-nél a Naptár csendben
-     * eldobhatná — a felhasználó pedig azt hinné, kiküldte a meghívót. A címeket
-     * ezért ott írja be, és a meghívó kiküldését (plusz a vendég-jogosultságokat
-     * és a „szóljunk a meghívottaknak?" kérdést) is az kezeli.
+     * A meghívó kiküldése innentől a Google szinkron dolga: az `Attendees`
+     * táblába írástól a provider „szennyezettnek" jelöli az esemény sorát, a
+     * szinkron feltölti, a Google szervere pedig kiküldi a meghívót és begyűjti a
+     * válaszokat (azok a [queryAttendees]-ben jelennek meg). Hálózatot itt nem
+     * használunk, és nem is várunk rá: a következő szinkronig a meghívott „még
+     * nem válaszolt" állapotban áll.
      *
-     * A kezdés átadása az ismétlődő eseményekhez kell: ebből tudja a Naptár,
-     * melyik előfordulást nyitja meg. A véget és az egész napos jelleget nem
-     * küldjük — azokat a Naptár előtöltésnek vehetné, és egy hibás vég felülírná
-     * a meglévő adatot.
+     * A `GUESTS_CAN_MODIFY` azért kell, hogy a meghívottak is szerkeszthessék az
+     * eseményt — enélkül csak a szervező módosíthatná, és a változás nem lenne
+     * kétirányú.
+     *
+     * ponytail: a két esemény-jelző írása hibát elnyelve fut. Ha egy gyártói
+     * providernél nem írható valamelyik, a meghívottak akkor is bekerülnek — az a
+     * lényeg —, a jelzőket pedig a szinkron a szerver adataival amúgy is
+     * felülírja.
      */
-    private fun handleInviteToEvent(call: MethodCall, result: MethodChannel.Result) {
+    private fun insertGuests(eventId: Long, guests: List<String>) {
+        // Aki már meg van hívva, azt nem hívjuk meg másodszor: az „ugyanaz a cím
+        // kétszer" a listában is két sorként jelenne meg.
+        val existing = contentResolver.queryAttendees(eventId)
+            .mapNotNull { (it["email"] as String?)?.lowercase() }
+            .toSet()
+        val invited = guests.filter { it.lowercase() !in existing }
+        if (invited.isEmpty()) return
+
         try {
-            val id = call.argument<String>("id")!!.toLong()
-            startActivity(
-                Intent(Intent.ACTION_EDIT)
-                    .setData(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id))
-                    .putExtra(
-                        CalendarContract.EXTRA_EVENT_BEGIN_TIME,
-                        call.argument<Number>("begin")!!.toLong(),
-                    ),
+            contentResolver.update(
+                ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId),
+                ContentValues().apply {
+                    // Enélkül a naptár és a szinkron „meghívottak nélküli"
+                    // eseménynek látja, és eldobhatja a sorokat.
+                    put(CalendarContract.Events.HAS_ATTENDEE_DATA, 1)
+                    put(CalendarContract.Events.GUESTS_CAN_MODIFY, 1)
+                },
+                null,
+                null,
             )
-            result.success(null)
-        } catch (e: ActivityNotFoundException) {
-            result.error("NO_CALENDAR_APP", "Nincs naptáralkalmazás a készüléken.", null)
         } catch (e: Exception) {
-            result.error("EDIT_FAILED", e.message, null)
+            // Szándékosan elnyelve: a meghívottak beírása lentebb így is lefut.
         }
+
+        contentResolver.bulkInsert(
+            CalendarContract.Attendees.CONTENT_URI,
+            invited.map { email ->
+                ContentValues().apply {
+                    put(CalendarContract.Attendees.EVENT_ID, eventId)
+                    put(CalendarContract.Attendees.ATTENDEE_EMAIL, email)
+                    put(
+                        CalendarContract.Attendees.ATTENDEE_RELATIONSHIP,
+                        CalendarContract.Attendees.RELATIONSHIP_ATTENDEE,
+                    )
+                    put(
+                        CalendarContract.Attendees.ATTENDEE_TYPE,
+                        CalendarContract.Attendees.TYPE_REQUIRED,
+                    )
+                    // „Meghívtuk, még nem válaszolt" — a választ a szinkron hozza.
+                    put(
+                        CalendarContract.Attendees.ATTENDEE_STATUS,
+                        CalendarContract.Attendees.ATTENDEE_STATUS_INVITED,
+                    )
+                }
+            }.toTypedArray(),
+        )
     }
 
     /** Egy esemény meghívottai és a válaszuk — a részletek lapja mutatja. */

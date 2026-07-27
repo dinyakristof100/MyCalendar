@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/ui.dart';
 import 'calendar_service.dart';
 import 'event_categories.dart';
 import 'event_form.dart';
@@ -90,32 +91,33 @@ class _EventDetails extends ConsumerWidget {
                 _Detail(icon: Icons.place_outlined, text: location),
               if (event.description case final description?)
                 _Detail(icon: Icons.notes_outlined, text: description),
-              // Egyetlen résztvevő = csak a szervező, vagyis nincs kivel
-              // megosztva. Így nem kell tudnunk, melyik cím a miénk.
-              if (guests.length > 1)
+              // Csak a szervező sorai = nincs kivel megosztva. Így nem kell
+              // tudnunk, melyik cím a miénk.
+              if (guests.any((guest) => !guest.organizer))
                 _Detail(
                   icon: Icons.group_outlined,
                   text: guests.map(_guestLine).join('\n'),
                 ),
               const SizedBox(height: 4),
-              Row(
+              // Wrap, nem Row: a három akció egy 320 px széles kijelzőn (vagy
+              // nagyobb rendszerbetűnél) nem fér egy sorba. Így a harmadik
+              // szépen a következő sorba kerül ahelyett, hogy a feliratok
+              // kifutnának vagy levágódnának.
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _edit(context, ref),
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Szerkesztés'),
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => _edit(context, ref),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    label: const Text('Szerkesztés'),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _invite(context),
-                      icon: const Icon(Icons.person_add_alt, size: 18),
-                      label: const Text('Meghívás'),
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => _invite(context, ref),
+                    icon: const Icon(Icons.person_add_alt, size: 18),
+                    label: const Text('Meghívás'),
                   ),
-                  const SizedBox(width: 10),
                   IconButton(
                     onPressed: () => _delete(context, ref),
                     icon: const Icon(Icons.delete_outline),
@@ -142,21 +144,30 @@ class _EventDetails extends ConsumerWidget {
     if (context.mounted) Navigator.pop(context);
   }
 
-  /// Meghívás: az esemény a telefon Naptár alkalmazásának szerkesztőjében
-  /// nyílik, a címeket ott adja meg a felhasználó (lásd [inviteToEvent]).
+  /// Meghívás: a bekért címek a naptár meghívott-táblájába kerülnek, a meghívót
+  /// a Google szinkron küldi ki ([addGuests]).
   ///
-  /// A lapot bezárjuk: visszatérve újranyitva a meghívottak listája friss lesz
-  /// (a provider a lap bezárásakor eldobódik), az esemény listáit pedig a
-  /// képernyők `AppLifecycleListener`-e magától újratölti.
-  Future<void> _invite(BuildContext context) async {
+  /// Sikernél a lap nyitva marad, és a provider érvénytelenítésétől azonnal
+  /// megjelenik az új sor — ez a visszajelzés. Hibánál viszont bezárjuk: a
+  /// felcsúszó lap a rendszer-üzenetsávot (SnackBar) eltakarná, és a felhasználó
+  /// semmit sem látna a hibából.
+  Future<void> _invite(BuildContext context, WidgetRef ref) async {
+    // A lap bezárása után a context már nem jó a keresésre — előre elkapjuk.
+    final messenger = ScaffoldMessenger.of(context);
+    final guests = await _askGuests(context);
+    if (guests == null || guests.isEmpty) return;
     try {
-      await inviteToEvent(event);
-      if (context.mounted) Navigator.pop(context);
+      await addGuests(event.id, guests);
+      ref.invalidate(eventGuestsProvider(event.id));
     } on PlatformException catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (context.mounted) Navigator.pop(context);
+      messenger.showSnackBar(
         SnackBar(
-          content: Text('Nem sikerült megnyitni a naptárban: ${e.message}'),
+          content: Text(
+            e.code == permissionDeniedCode
+                ? 'Engedélyezd a naptár írását, majd próbáld újra.'
+                : 'Nem sikerült meghívni: ${e.message}',
+          ),
         ),
       );
     }
@@ -218,6 +229,80 @@ class _EventDetails extends ConsumerWidget {
   }
 }
 
+/// Meghívottak bekérése. A felismert címekkel tér vissza ([parseGuestEmails]),
+/// elvetéskor `null`.
+Future<List<String>?> _askGuests(BuildContext context) =>
+    showDialog<List<String>>(
+      context: context,
+      builder: (_) => const _GuestDialog(),
+    );
+
+class _GuestDialog extends StatefulWidget {
+  const _GuestDialog();
+
+  @override
+  State<_GuestDialog> createState() => _GuestDialogState();
+}
+
+class _GuestDialogState extends State<_GuestDialog> {
+  final _input = TextEditingController();
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // A gomb csak akkor él, ha van felismerhető cím a mezőben.
+    final guests = parseGuestEmails(_input.text);
+    void submit() => Navigator.pop(context, guests);
+
+    return AlertDialog(
+      title: const Text('Meghívás'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _input,
+            autofocus: true,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            textInputAction: TextInputAction.done,
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) {
+              if (guests.isNotEmpty) submit();
+            },
+            decoration: const InputDecoration(
+              labelText: 'E-mail cím',
+              hintText: 'anna@pelda.hu, bela@pelda.hu',
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'A meghívót a Google küldi ki a fiókodból, amikor a naptár '
+            'legközelebb szinkronizál. Aki elfogadja, ugyanezt az eseményt '
+            'látja, és szerkesztheti is.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Mégse'),
+        ),
+        FilledButton(
+          onPressed: guests.isEmpty ? null : submit,
+          child: const Text('Meghívás'),
+        ),
+      ],
+    );
+  }
+}
+
 /// Egy meghívott sora: „Anna – elfogadta". A szervező nem válaszol a saját
 /// eseményére, őt csak megjelöljük.
 String _guestLine(EventGuest guest) => guest.organizer
@@ -255,11 +340,16 @@ class _CategoryChip extends StatelessWidget {
                 color: color,
               ),
               const SizedBox(width: 8),
-              Text(
-                category?.name ?? 'Kategória hozzáadása',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: category == null ? scheme.onSurfaceVariant : color,
-                  fontWeight: FontWeight.w600,
+              // Flexible + FitText: a `Row` a nem-flex gyerekének végtelen
+              // szélességet ad, ezért egy hosszú kategórianév kifutna. Flexible
+              // nélkül a zsugorításnak nincs mihez képest zsugorítania.
+              Flexible(
+                child: FitText(
+                  category?.name ?? 'Kategória hozzáadása',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: category == null ? scheme.onSurfaceVariant : color,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],

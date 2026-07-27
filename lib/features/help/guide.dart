@@ -61,13 +61,12 @@ const guideTopics = <GuideTopic>[
     title: 'Közös esemény másokkal',
     body:
         'Új eseménynél a „Meghívottak” mezőbe beírhatod mások e-mail címét — '
-        'többet is, vesszővel. A mentés ilyenkor a telefon Naptár '
-        'alkalmazásában fejeződik be: az küldi ki a meghívót, amit a másik fél '
-        'elfogadhat vagy elutasíthat. Ha elfogadta, ugyanaz az esemény jelenik '
-        'meg nála is, és amit bármelyikőtök módosít, azt a többiek is látják. '
-        'Már meglévő eseményhez is hívhatsz valakit: nyisd meg az eseményt, és '
-        'a „Meghívás” gombbal a Naptárban add meg a címét. Ki mit válaszolt, az '
-        'esemény részleteinél olvasható.',
+        'többet is, vesszővel. Meglévő eseményhez a részleteinél a „Meghívás” '
+        'gombbal hívhatsz valakit. A meghívót a Google küldi ki a fiókodból, '
+        'amikor a naptár legközelebb szinkronizál — addig „még nem válaszolt” '
+        'áll a meghívottnál. Aki elfogadja, ugyanazt az eseményt látja, és '
+        'szerkesztheti is: amit bármelyikőtök módosít, azt a többiek is látják. '
+        'Ki mit válaszolt, az esemény részleteinél olvasható.',
   ),
   GuideTopic(
     icon: Icons.calendar_month_outlined,
@@ -234,15 +233,24 @@ class _GuideDialogState extends State<_GuideDialog> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-              child: Row(
+              // Wrap, nem Row: kis kijelzőn (vagy nagy rendszerbetűvel) a
+              // „Vissza" és a „Tovább" nem fér egy sorba, így a második a
+              // következő sorba kerül a levágás helyett. Az üres helykitöltő
+              // azért kell, hogy az első lapon — ahol nincs „Vissza" — a
+              // „Tovább" a jobb szélen maradjon.
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (_index > 0)
                     TextButton.icon(
                       onPressed: () => _go(-1),
                       icon: const Icon(Icons.arrow_back, size: 18),
                       label: const Text('Vissza'),
-                    ),
-                  const Spacer(),
+                    )
+                  else
+                    const SizedBox.shrink(),
                   FilledButton.icon(
                     onPressed: _isLast ? _close : () => _go(1),
                     style: FilledButton.styleFrom(

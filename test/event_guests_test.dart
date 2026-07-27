@@ -54,7 +54,7 @@ void main() {
     expect(parseGuest(_raw(organizer: true)).organizer, isTrue);
   });
 
-  test('meglévő esemény meghívása: az előfordulás kezdése megy át', () async {
+  test('meglévő eseményhez meghívás: id + címek mennek át', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     MethodCall? sent;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -66,32 +66,16 @@ void main() {
           },
         );
 
-    final at = DateTime(2026, 7, 23, 14, 30);
-    await inviteToEvent(
-      CalendarEvent(id: '42', title: 'Ebéd', at: at, allDay: false),
-    );
-    // Se vég, se allDay: azokat a Naptár előtöltésnek vehetné, és felülírná a
-    // meglévő esemény adatait.
-    expect(sent!.method, 'inviteToEvent');
-    expect(sent!.arguments, {'id': '42', 'begin': at.millisecondsSinceEpoch});
+    await addGuests('42', ['anna@pelda.hu', 'bela@pelda.hu']);
 
-    // Egész naposnál a modellben helyi dátum áll, a naptár viszont UTC éjfélből
-    // találja meg az előfordulást.
-    await inviteToEvent(
-      CalendarEvent(
-        id: '7',
-        title: 'Szabadság',
-        at: DateTime(2026, 7, 23),
-        allDay: true,
-      ),
-    );
+    expect(sent!.method, 'addGuests');
     expect(sent!.arguments, {
-      'id': '7',
-      'begin': DateTime.utc(2026, 7, 23).millisecondsSinceEpoch,
+      'id': '42',
+      'guests': ['anna@pelda.hu', 'bela@pelda.hu'],
     });
   });
 
-  test('meghívottas esemény: a Naptár szerkesztőjének szánt mezők', () async {
+  test('új esemény meghívottakkal: egy hívás, a címekkel együtt', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     MethodCall? sent;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -99,26 +83,30 @@ void main() {
           const MethodChannel('mycalendar/device_calendar'),
           (call) async {
             sent = call;
-            return null;
+            return '7';
           },
         );
 
     final start = DateTime(2026, 7, 23, 14, 30);
-    await createEventWithGuests(
+    await createEvent(
       title: 'Közös ebéd',
       start: start,
       end: start.add(const Duration(hours: 1)),
       guests: ['anna@pelda.hu', 'bela@pelda.hu'],
     );
 
-    expect(sent!.method, 'createEventWithGuests');
+    expect(sent!.method, 'createEvent');
     expect(sent!.arguments, {
       'title': 'Közös ebéd',
-      // Az `Intent.EXTRA_EMAIL` vesszővel elválasztott listát vár.
-      'guests': 'anna@pelda.hu,bela@pelda.hu',
+      'guests': ['anna@pelda.hu', 'bela@pelda.hu'],
       'begin': start.millisecondsSinceEpoch,
       'end': DateTime(2026, 7, 23, 15, 30).millisecondsSinceEpoch,
       'allDay': false,
     });
+
+    // Meghívott nélkül a kulcs sem megy át — a natív oldal ezt veszi „nincs
+    // meghívott"-nak, és a többi hívó argumentumai változatlanok.
+    await createEvent(title: 'Egyedül', start: start, end: start);
+    expect(sent!.arguments, isNot(contains('guests')));
   });
 }

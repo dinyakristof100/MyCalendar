@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/ui.dart';
 import '../auth/auth_controller.dart';
 import '../settings/settings_screen.dart';
 import 'calendar_service.dart';
@@ -38,10 +39,10 @@ class _EventForm extends ConsumerStatefulWidget {
 class _EventFormState extends ConsumerState<_EventForm> {
   final _title = TextEditingController();
 
-  /// A meghívottak e-mail címei egy mezőben (lásd [parseGuestEmails]). Csak új
-  /// eseménynél van itt: meglévőhöz a részletek lapján a „Meghívás" gomb visz a
-  /// Naptárba (lásd [inviteToEvent]) — ott az `ACTION_EDIT` nem garantálja az
-  /// előre kitöltött vendéglistát, ezért ott nem is kérjük be.
+  /// A meghívottak e-mail címei egy mezőben (lásd [parseGuestEmails]). Új
+  /// eseménynél a mentéssel együtt kerülnek be, meglévőnél a meglévő
+  /// meghívottak mellé ([addGuests]) — a mező mindig üresen nyílik, mert
+  /// hozzáadni lehet vele, nem szerkeszteni a listát.
   final _guests = TextEditingController();
 
   late DateTime _start;
@@ -181,6 +182,7 @@ class _EventFormState extends ConsumerState<_EventForm> {
       // Az űrlap nyitva léte alatt a kategória törölhető is — a már nem létezőt
       // nem rendeljük hozzá.
       final categoryId = ref.read(categoriesProvider).byId(_categoryId)?.id;
+      final guests = parseGuestEmails(_guests.text);
       if (editing != null) {
         await updateEvent(
           id: editing.id,
@@ -193,19 +195,12 @@ class _EventFormState extends ConsumerState<_EventForm> {
           rrule: editing.rrule,
         );
         await categories.assign(editing.id, categoryId);
-      } else if (parseGuestEmails(_guests.text) case final guests
-          when guests.isNotEmpty) {
-        // Meghívottakkal a Naptár szerkesztője veszi át — ő küldi a meghívót.
-        // Nem kapunk vissza azonosítót, tehát kategóriát sem tudunk kötni rá; a
-        // részletek lapján utólag megadható.
-        await createEventWithGuests(
-          title: title,
-          start: _start,
-          end: _end,
-          allDay: _allDay,
-          rrule: rruleFor(_recurrence, _start),
-          guests: guests,
-        );
+        if (guests.isNotEmpty) {
+          await addGuests(editing.id, guests);
+          // A részletek lapja ebből olvassa a meghívottakat — az új sorok csak
+          // így látszanak azonnal.
+          ref.invalidate(eventGuestsProvider(editing.id));
+        }
       } else {
         final id = await createEvent(
           title: title,
@@ -213,6 +208,7 @@ class _EventFormState extends ConsumerState<_EventForm> {
           end: _end,
           allDay: _allDay,
           rrule: rruleFor(_recurrence, _start),
+          guests: guests,
           // A bejelentkezett fiók naptárába — a natív oldal magától a készülék
           // első írható naptárát venné, ami több fióknál másé is lehet. A
           // naptárlistát a lista- és a naptárnézet már betöltötte; ha mégsem,
@@ -333,7 +329,10 @@ class _EventFormState extends ConsumerState<_EventForm> {
                 ),
               ),
               const SizedBox(height: 16),
-              DecoratedBox(
+              // AppCard, nem sima DecoratedBox: a benne lévő SwitchListTile a
+              // legközelebbi Material-re festi a koppintás-hullámát, amit a
+              // DecoratedBox háttere eltakarna (a Flutter is figyelmeztet rá).
+              AppCard(
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(20),
@@ -430,6 +429,9 @@ class _EventFormState extends ConsumerState<_EventForm> {
                 const SizedBox(height: 16),
                 DropdownButtonFormField<Recurrence>(
                   initialValue: _recurrence,
+                  // Enélkül az elem a saját (természetes) szélességét kérné, és
+                  // a leghosszabb felirat kifutna a mezőből kis kijelzőn.
+                  isExpanded: true,
                   onChanged: (value) =>
                       setState(() => _recurrence = value ?? Recurrence.none),
                   decoration: InputDecoration(
@@ -445,43 +447,44 @@ class _EventFormState extends ConsumerState<_EventForm> {
                     for (final option in Recurrence.values)
                       DropdownMenuItem(
                         value: option,
-                        child: Text(_recurrenceLabels[option]!),
+                        child: FitText(_recurrenceLabels[option]!),
                       ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _guests,
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  // A figyelmeztető sáv megjelenése a mező tartalmán múlik.
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    labelText: 'Meghívottak',
-                    hintText: 'anna@pelda.hu, bela@pelda.hu',
-                    prefixIcon: const Icon(Icons.group_outlined),
-                    filled: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
+              ],
+              const SizedBox(height: 14),
+              // Meglévő eseménynél is itt van: amit ide írnak, az a meglévő
+              // meghívottak MELLÉ kerül (a natív oldal a már meghívottakat
+              // kiszűri). A jelenlegi listát a részletek lapja mutatja.
+              TextField(
+                controller: _guests,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                // A tájékoztató sáv megjelenése a mező tartalmán múlik.
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: _isEdit ? 'További meghívottak' : 'Meghívottak',
+                  hintText: 'anna@pelda.hu, bela@pelda.hu',
+                  prefixIcon: const Icon(Icons.group_outlined),
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
                   ),
                 ),
-                // Csak akkor szólunk, ha tényleg lesz meghívott: a mentés
-                // ilyenkor a Naptár szerkesztőjében folytatódik, ami látható
-                // váltás — ne érje váratlanul a felhasználót.
-                if (parseGuestEmails(_guests.text).isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const _Warning(
-                    icon: Icons.group_outlined,
-                    text:
-                        'Meghívottakkal a mentés a telefon Naptár '
-                        'alkalmazásában fejeződik be — a meghívót az küldi ki. '
-                        'Ott érdemes bekapcsolva hagyni, hogy a meghívottak '
-                        'szerkeszthessék az eseményt: így mindenki '
-                        'módosításait látni fogod.',
-                  ),
-                ],
+              ),
+              // Csak akkor szólunk, ha tényleg lesz meghívott: a meghívó nem
+              // azonnal megy ki, és ezt jobb előre tudni, mint hiába várni rá.
+              if (parseGuestEmails(_guests.text).isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const _Warning(
+                  icon: Icons.group_outlined,
+                  text:
+                      'A meghívót a Google küldi ki a fiókodból, amikor a '
+                      'naptár legközelebb szinkronizál. Addig „még nem '
+                      'válaszolt” áll a meghívottnál; a válaszok az esemény '
+                      'részleteinél jelennek meg.',
+                ),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -657,10 +660,11 @@ class _PickerChip extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: accent),
               const SizedBox(width: 8),
+              // Zsugorodik, nem vágódik: a dátumcsipesz feliratából („2026.
+              // július 23., csütörtök") a levágás pont a lényeget vinné el.
               Flexible(
-                child: Text(
+                child: FitText(
                   label,
-                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: accent,
                     fontWeight: FontWeight.w600,

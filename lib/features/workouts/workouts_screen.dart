@@ -46,8 +46,12 @@ class _NoPlanYet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // A görgetés a KÖZÉPRE igazítás alatt van: rövid tartalomnál a görgetőnézet
+    // a tartalom méretét veszi fel, tehát középen marad; kis kijelzőn viszont
+    // görgethetővé válik ahelyett, hogy kifutna. (Fordított sorrendben mindig a
+    // képernyő tetejére tapadna.)
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(40, 24, 40, 60),
         child: Column(
           mainAxisSize: MainAxisSize.min,

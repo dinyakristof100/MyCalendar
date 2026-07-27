@@ -16,6 +16,31 @@ Color readableOn(Color background) {
   return contrastWithWhite >= contrastWithBlack ? Colors.white : Colors.black;
 }
 
+/// Felirat, ami inkább arányosan kisebb lesz, mint hogy kifusson a helyéből.
+///
+/// Kis kijelzőn (és nagyobb rendszerbetűnél) egy hosszabb gomb- vagy
+/// listaelem-felirat kifutna a sorából. A levágás (`…`) és a tördelés helyett
+/// ilyenkor a szöveg zsugorodik, tehát egészben olvasható marad. Ott használjuk,
+/// ahol a magasság kötött, a szélesség pedig szűk lehet: gombokon, csipeszeken,
+/// legördülő elemeken.
+///
+/// Bőven elég helynél semmit nem tesz — a `scaleDown` csak lefelé méretez.
+class FitText extends StatelessWidget {
+  const FitText(this.text, {this.style, super.key});
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => FittedBox(
+    fit: BoxFit.scaleDown,
+    // Sor kezdetéhez igazítva: enélkül a zsugorított felirat elugrana a helyén
+    // ahhoz képest, ahol elég helynél áll.
+    alignment: AlignmentDirectional.centerStart,
+    child: Text(text, style: style, maxLines: 1, softWrap: false),
+  );
+}
+
 /// Kártyafelület árnyékkal.
 ///
 /// Sötét témában az árnyék láthatatlan — ott a mélységet világosabb felület és

@@ -72,6 +72,9 @@ String? rruleFor(Recurrence recurrence, DateTime start) => switch (recurrence) {
 /// [description] és [location] az importnak kell: a mentésfájl jegyzet- és
 /// hely-oszlopa így nem vész el. Az app saját űrlapja nem tölti ki őket.
 ///
+/// [guests] megadva közös esemény jön létre: a címek a naptár meghívott-táblájába
+/// kerülnek, a meghívót a Google szinkron küldi ki (lásd [addGuests]).
+///
 /// A hívó dolga frissíteni a listát — az `upcomingEventsProvider`
 /// érvénytelenítése az emlékeztetőket is újraütemezi.
 Future<String?> createEvent({
@@ -83,6 +86,7 @@ Future<String?> createEvent({
   int? calendarId,
   String? description,
   String? location,
+  List<String> guests = const [],
 }) => _channel.invokeMethod<String>('createEvent', {
   'title': title,
   // Null-aware kulcs: nem ismétlődőnél a kulcs is elmarad — a natív oldal ezt
@@ -91,6 +95,9 @@ Future<String?> createEvent({
   'calendarId': ?calendarId,
   'description': ?description,
   'location': ?location,
+  // Meghívott nélkül a kulcs is elmarad: a natív oldal ezt veszi „nincs
+  // meghívott"-nak, és a régi hívások argumentumai változatlanok.
+  if (guests.isNotEmpty) 'guests': guests,
   ..._when(start, end, allDay),
 });
 
@@ -127,53 +134,26 @@ Future<void> deleteEvent(String id) =>
 /// Kisbetűsít: így az „Anna@pelda.hu" és az „anna@pelda.hu" egy meghívott — a
 /// Google is egynek veszi őket.
 ///
-/// ponytail: nincs igazi cím-validálás. A valódi visszajelzést (létező-e a cím,
-/// megy-e a meghívó) a Naptár adja, ahol a mentés történik — egy saját regex
-/// legfeljebb érvényes címeket utasítana el tévesen.
+/// ponytail: nincs igazi cím-validálás, csak `@`-ellenőrzés. Azt, hogy a cím
+/// létezik-e, csak a Google tudja megmondani a meghívó kiküldésekor; egy saját
+/// regex legfeljebb érvényes címeket utasítana el tévesen.
 List<String> parseGuestEmails(String input) => {
   for (final part in input.split(RegExp(r'[,;\s]+')))
     if (part.contains('@')) part.toLowerCase(),
 }.toList();
 
-/// Új esemény a naptáralkalmazás saját szerkesztőjében, előre kitöltve, a
-/// megadott meghívottakkal (lásd `MainActivity.handleCreateEventWithGuests`).
+/// Meghívottak hozzáadása meglévő eseményhez (lásd
+/// `MainActivity.insertGuests`).
 ///
-/// A meghívó kiküldése, az elfogadás/elutasítás és a módosítások szétosztása a
-/// Google szinkron dolga — ezért nem mi írjuk be az eseményt. A mentést a
-/// felhasználó a Naptárban nyomja meg, így nincs visszatérő azonosító: a hívó
-/// nem tud kategóriát kötni rá, és nem is tudhatja biztosan, hogy létrejött-e.
-Future<void> createEventWithGuests({
-  required String title,
-  required DateTime start,
-  required DateTime end,
-  required List<String> guests,
-  bool allDay = false,
-  String? rrule,
-}) => _channel.invokeMethod<void>('createEventWithGuests', {
-  'title': title,
-  'guests': guests.join(','),
-  'rrule': ?rrule,
-  ..._when(start, end, allDay),
-});
-
-/// Meglévő esemény megnyitása a naptáralkalmazás szerkesztőjében, hogy a
-/// felhasználó meghívottat adhasson hozzá (lásd
-/// `MainActivity.handleInviteToEvent`).
+/// A címek közvetlenül a naptár meghívott-táblájába kerülnek — nem nyílik meg
+/// másik alkalmazás. A meghívót innen a Google szinkron küldi ki, a válaszok
+/// pedig az [eventGuestsProvider]-ben jelennek meg. Amíg a szinkron le nem fut, a
+/// meghívott „még nem válaszolt" állapotban áll.
 ///
-/// Miért nem a mi mezőnkbe írja a címeket? Mert az `ACTION_EDIT` nem garantálja a
-/// vendéglista átvételét, és a csendben eldobott meghívó a legrosszabb kimenet: a
-/// felhasználó azt hinné, elküldte. Új eseménynél ez nem gond, ott az
-/// `ACTION_INSERT` dokumentáltan átveszi ([createEventWithGuests]).
-///
-/// A válaszok utána maguktól megjelennek az [eventGuestsProvider]-ben.
-Future<void> inviteToEvent(CalendarEvent event) =>
-    _channel.invokeMethod<void>('inviteToEvent', {
-      'id': event.id,
-      // Az ismétlődő esemény melyik előfordulása. Egész naposnál a naptár UTC
-      // éjfelet vár — a modellben viszont helyi dátum áll (lásd [parseEvent]).
-      'begin': (event.allDay ? utcMidnight(event.at) : event.at)
-          .millisecondsSinceEpoch,
-    });
+/// A már meghívott címeket a natív oldal kiszűri: ugyanaz a cím nem kerül be
+/// kétszer.
+Future<void> addGuests(String eventId, List<String> guests) =>
+    _channel.invokeMethod<void>('addGuests', {'id': eventId, 'guests': guests});
 
 /// A meghívott válasza. A `pending` gyűjti a „meghívtuk, de nem válaszolt" és a
 /// hiányzó státuszt is — a felhasználónak ez ugyanaz az információ.
