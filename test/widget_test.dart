@@ -221,6 +221,13 @@ void main() {
     // görgetni a teszt közben.
     await tester.binding.setSurfaceSize(const Size(1080, 2400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    // A teszt VALÓDI tervet ment a beállításokba — takarítás nélkül a következő
+    // tesztek már nem a „még nincs terved" állapottal indulnának.
+    addTearDown(() async {
+      await prefs.remove('workoutPlans');
+      await prefs.remove('activeWorkoutPlan');
+      await prefs.remove('workoutProgress');
+    });
 
     await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
     await tester.pumpAndSettle();
@@ -251,6 +258,35 @@ void main() {
     );
     expect(find.text('1. NAP'), findsOneWidget);
     expect(find.text('mell, tricepsz'), findsOneWidget);
+  });
+
+  testWidgets('a heti edzésnapok száma 1 és 14 között állítható', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1080, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Edzésnapló');
+    await tester.tap(find.text('Edzésterv létrehozása'));
+    await tester.pumpAndSettle();
+
+    // A napok számát a beírómezők jelenléte mutatja (kulcs: `hét-nap`).
+    // Alapból 3 nap; a határon túli koppintás nem tesz semmit.
+    for (var i = 0; i < 5; i++) {
+      await tester.tap(find.byTooltip('Kevesebb nap'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.byKey(const ValueKey('0-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('0-1')), findsNothing);
+
+    for (var i = 0; i < 20; i++) {
+      await tester.tap(find.byTooltip('Több nap'));
+      await tester.pumpAndSettle();
+    }
+    expect(find.byKey(const ValueKey('0-13')), findsOneWidget);
+    expect(find.byKey(const ValueKey('0-14')), findsNothing);
   });
 
   testWidgets('a mai edzés csak megerősítés után kap pipát', (tester) async {

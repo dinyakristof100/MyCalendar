@@ -5,7 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../core/app_scaffold.dart';
 import 'workout_plans.dart';
 
-const _maxDays = 7;
+/// A heti edzésnapok felső határa; az alsó 1 (lásd [_DayCount]).
+///
+/// Lehet 7-nél több: a napok a terv **slotjai**, nem naptári napok — a
+/// teljesítéseket is slot-index tartja nyilván (lásd `WeekProgress`), tehát a
+/// napi két edzés is elférjen benne.
+const _maxDays = 14;
 
 /// Edzésterv felvitele vagy szerkesztése: típus → heti edzésnapok száma → mi
 /// kerül az egyes napokra.
