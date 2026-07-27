@@ -61,8 +61,11 @@ const guideTopics = <GuideTopic>[
     title: 'Közös esemény másokkal',
     body:
         'Új eseménynél a „Meghívottak” mezőbe beírhatod mások e-mail címét — '
-        'többet is, vesszővel. Meglévő eseményhez a részleteinél a „Meghívás” '
-        'gombbal hívhatsz valakit. A meghívót a Google küldi ki a fiókodból, '
+        'többet is, vesszővel. A mező alatt megjelennek azok a címek, akikkel '
+        'már volt közös eseményed: gépelés közben szűkül a lista, és egy '
+        'koppintással beírhatod bármelyiket. Meglévő eseményhez a részleteinél '
+        'a „Meghívás” gombbal hívhatsz valakit. A meghívót a Google küldi ki a '
+        'fiókodból, '
         'amikor a naptár legközelebb szinkronizál — addig „még nem válaszolt” '
         'áll a meghívottnál. Aki elfogadja, ugyanazt az eseményt látja, és '
         'szerkesztheti is: amit bármelyikőtök módosít, azt a többiek is látják. '

@@ -94,6 +94,37 @@ fun ContentResolver.queryAttendees(eventId: Long): List<Map<String, Any?>> {
     return guests
 }
 
+/**
+ * Az eddig ismert meghívottak e-mail címei: minden cím, ami a naptár
+ * meghívott-táblájában szerepel — akit valaha meghívtunk, és aki minket hívott
+ * meg, plusz a közös események többi résztvevője.
+ *
+ * Nem kell hozzá névjegy-engedély (READ_CONTACTS): ez ugyanaz a naptár-olvasás,
+ * amit az app amúgy is használ.
+ *
+ * Gyakoriság szerint csökkenő, azon belül betűrendben — akivel a legtöbbször
+ * volt közös eseményünk, az kerül előre a javaslatok között.
+ */
+fun ContentResolver.queryKnownGuests(): List<String> {
+    val counts = mutableMapOf<String, Int>()
+    query(
+        CalendarContract.Attendees.CONTENT_URI,
+        arrayOf(CalendarContract.Attendees.ATTENDEE_EMAIL),
+        null,
+        null,
+        null,
+    )?.use { cursor ->
+        while (cursor.moveToNext()) {
+            val email = cursor.getString(0)?.trim()?.lowercase()
+            if (email.isNullOrEmpty() || !email.contains("@")) continue
+            counts[email] = (counts[email] ?: 0) + 1
+        }
+    }
+    return counts.entries
+        .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+        .map { it.key }
+}
+
 /** A meghívott válasza szövegesen. Ami nem ismerhető fel, az „nem válaszolt". */
 private fun attendeeStatus(status: Int): String = when (status) {
     CalendarContract.Attendees.ATTENDEE_STATUS_ACCEPTED -> "accepted"

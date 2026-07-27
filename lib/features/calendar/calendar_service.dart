@@ -142,6 +142,48 @@ List<String> parseGuestEmails(String input) => {
     if (part.contains('@')) part.toLowerCase(),
 }.toList();
 
+/// A mezőben épp gépelt cím: az utolsó elválasztó utáni rész. A javaslatokat
+/// ehhez keressük — a korábban beírt, kész címek nem szólnak bele.
+String guestFragment(String input) => input.split(RegExp(r'[,;\s]+')).last;
+
+/// Az épp gépelt cím lecserélése [email]-re, a végén vesszővel: a következő
+/// meghívott rögtön gépelhető, a korábbiak érintetlenek.
+String withGuest(String input, String email) {
+  final fragment = guestFragment(input);
+  return '${input.substring(0, input.length - fragment.length)}$email, ';
+}
+
+/// A [known] címek közül azok, amik illenek a mezőben épp gépelt részre.
+///
+/// Részegyezés is elég (bárhol a címben), a mezőben már szereplő címeket pedig
+/// kihagyjuk. Üres gépelt résznél mind illik — így a mező a leggyakoribb címeket
+/// gépelés előtt is felajánlja.
+///
+/// A [limit] azért kell, hogy a javaslatok ne nyomják le a képernyő aljára a
+/// mentés gombot.
+List<String> matchingGuests(List<String> known, String input, {int limit = 5}) {
+  final fragment = guestFragment(input).toLowerCase();
+  final already = parseGuestEmails(input).toSet();
+  return [
+    for (final email in known)
+      if (!already.contains(email) && email.contains(fragment)) email,
+  ].take(limit).toList();
+}
+
+/// Az eddig ismert meghívottak címei a naptárból (lásd
+/// `CalendarQuery.queryKnownGuests`) — ebből ajánl a meghívottak mezője.
+///
+/// A saját címünk kimarad: magunkat nem hívjuk meg. Engedély nélkül üres a lista,
+/// nem hiba — a javaslat kényelmi funkció.
+final knownGuestsProvider = FutureProvider<List<String>>((ref) async {
+  final mine = ref.watch(currentUserProvider).value?.email?.toLowerCase();
+  final raw = await _channel.invokeMethod<List<Object?>>('knownGuests');
+  return [
+    for (final email in raw ?? const <Object?>[])
+      if (email is String && email != mine) email,
+  ];
+});
+
 /// Meghívottak hozzáadása meglévő eseményhez (lásd
 /// `MainActivity.insertGuests`).
 ///

@@ -1,6 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_calendar/features/calendar/calendar_service.dart';
+import 'package:my_calendar/features/calendar/guest_field.dart';
 
 /// Ahogy a natív oldalról érkezik (lásd `CalendarQuery.queryAttendees`).
 Map<String, Object?> _raw({
@@ -22,8 +25,8 @@ void main() {
       'bela@pelda.hu',
       'anna@pelda.hu',
     ]);
-    // A @ nélküli darab nem cím, az üres mezőből pedig nincs meghívott — ez
-    // dönti el, hogy sima mentés lesz-e vagy a Naptár szerkesztője nyílik.
+    // A @ nélküli darab nem cím, az üres mezőből pedig nincs meghívott — ezen
+    // múlik, hogy a mentés egyáltalán hív-e valakit.
     expect(parseGuestEmails('anna, nemcim, '), isEmpty);
     expect(parseGuestEmails('   '), isEmpty);
   });
@@ -52,6 +55,100 @@ void main() {
     );
     expect(parseGuest(_raw()).label, '(ismeretlen)');
     expect(parseGuest(_raw(organizer: true)).organizer, isTrue);
+  });
+
+  test('javaslatok: részegyezés, a már beírtak nélkül, korlátozva', () {
+    const known = [
+      'anna@pelda.hu',
+      'bela@pelda.hu',
+      'anna.kovacs@masik.hu',
+      'cili@pelda.hu',
+      'dora@pelda.hu',
+      'edit@pelda.hu',
+    ];
+
+    // Gépelés előtt mind illik — a mező a leggyakoribbakat felajánlja. A
+    // korlát nem engedi lenyomni a képernyő aljára a mentés gombot.
+    expect(matchingGuests(known, '').length, 5);
+
+    // Részegyezés bárhol a címben: a név elején és a domainben is.
+    expect(matchingGuests(known, 'anna'), [
+      'anna@pelda.hu',
+      'anna.kovacs@masik.hu',
+    ]);
+    expect(matchingGuests(known, 'masik'), ['anna.kovacs@masik.hu']);
+
+    // Csak az utolsó (épp gépelt) rész számít, a korábbi kész címek nem — és
+    // ami már benne van a mezőben, azt nem ajánljuk újra.
+    expect(matchingGuests(known, 'bela@pelda.hu, anna'), [
+      'anna@pelda.hu',
+      'anna.kovacs@masik.hu',
+    ]);
+    expect(
+      matchingGuests(known, 'anna@pelda.hu, '),
+      isNot(contains('anna@pelda.hu')),
+    );
+    expect(matchingGuests(known, 'nincsilyen'), isEmpty);
+  });
+
+  test('javaslat választása: csak az épp gépelt címet cseréli', () {
+    expect(guestFragment('anna@pelda.hu, be'), 'be');
+    expect(guestFragment('anna@pelda.hu, '), '');
+    expect(guestFragment(''), '');
+
+    // A korábbi címek érintetlenek, a végén vessző: jöhet a következő.
+    expect(
+      withGuest('anna@pelda.hu, be', 'bela@pelda.hu'),
+      'anna@pelda.hu, bela@pelda.hu, ',
+    );
+    expect(withGuest('', 'anna@pelda.hu'), 'anna@pelda.hu, ');
+    expect(
+      withGuest('anna@pelda.hu, ', 'bela@pelda.hu'),
+      'anna@pelda.hu, bela@pelda.hu, ',
+    );
+  });
+
+  testWidgets('a mező gépelésre szűkít, a csipesz beírja a címet', (
+    tester,
+  ) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('mycalendar/device_calendar'),
+          (call) async => switch (call.method) {
+            'knownGuests' => const ['anna@pelda.hu', 'bela@pelda.hu'],
+            _ => <Object?>[],
+          },
+        );
+
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: GuestField(controller: controller, label: 'Meghívottak'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Gépelés előtt mindkettő felajánlva.
+    expect(find.text('anna@pelda.hu'), findsOneWidget);
+    expect(find.text('bela@pelda.hu'), findsOneWidget);
+
+    // Részegyezésre szűkül...
+    await tester.enterText(find.byType(TextField), 'bel');
+    await tester.pumpAndSettle();
+    expect(find.text('anna@pelda.hu'), findsNothing);
+
+    // ...és a csipesz a gépelt rész helyére írja a címet.
+    await tester.tap(find.text('bela@pelda.hu'));
+    await tester.pumpAndSettle();
+    expect(controller.text, 'bela@pelda.hu, ');
+    // Ami már benne van, azt nem ajánlja újra — a másik viszont visszatér.
+    expect(find.text('bela@pelda.hu'), findsNothing);
+    expect(find.text('anna@pelda.hu'), findsOneWidget);
   });
 
   test('meglévő eseményhez meghívás: id + címek mennek át', () async {

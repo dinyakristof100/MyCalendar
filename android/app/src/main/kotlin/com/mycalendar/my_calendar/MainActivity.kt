@@ -53,6 +53,7 @@ class MainActivity : FlutterActivity() {
                     "createEvent" -> handleCreateEvent(call, result)
                     "attendees" -> handleAttendees(call, result)
                     "addGuests" -> handleAddGuests(call, result)
+                    "knownGuests" -> handleKnownGuests(result)
                     "updateEvent" -> handleUpdateEvent(call, result)
                     "deleteEvent" -> handleDeleteEvent(call, result)
                     "pickTextFile" -> handlePickTextFile(result)
@@ -302,6 +303,25 @@ class MainActivity : FlutterActivity() {
                 }
             }.toTypedArray(),
         )
+    }
+
+    /**
+     * A már ismert meghívottak címei — ebből ajánl a meghívottak mezője.
+     *
+     * Engedély nélkül üres lista, nem hiba: a javaslat kényelmi funkció, nem
+     * érdemes érte hibát mutatni a felhasználónak. (Az `ensureReadPermission`
+     * ilyenkor amúgy is felkéri az engedélyt.)
+     */
+    private fun handleKnownGuests(result: MethodChannel.Result) {
+        if (!has(Manifest.permission.READ_CALENDAR)) {
+            result.success(emptyList<String>())
+            return
+        }
+        try {
+            result.success(contentResolver.queryKnownGuests())
+        } catch (e: Exception) {
+            result.error("QUERY_FAILED", e.message, null)
+        }
     }
 
     /** Egy esemény meghívottai és a válaszuk — a részletek lapja mutatja. */

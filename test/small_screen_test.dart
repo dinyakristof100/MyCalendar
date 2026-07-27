@@ -92,7 +92,15 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('mycalendar/device_calendar'),
-          (_) async => <Object?>[],
+          // A meghívott-javaslat csipeszeihez szándékosan hosszú cím: annak is
+          // el kell férnie a legszűkebb kijelzőn.
+          (call) async => switch (call.method) {
+            'knownGuests' => const [
+              'nagyon.hosszu.nevu.kollega@egy-hosszu-ceges-domain.hu',
+              'anna@pelda.hu',
+            ],
+            _ => <Object?>[],
+          },
         );
   });
 

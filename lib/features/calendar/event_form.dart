@@ -8,6 +8,7 @@ import '../settings/settings_screen.dart';
 import 'calendar_service.dart';
 import 'event_categories.dart';
 import 'event_groups.dart';
+import 'guest_field.dart';
 
 /// Esemény felvitele vagy szerkesztése. `true`-val záródik, ha az esemény be is
 /// került / módosult a naptárban — a hívónak ilyenkor kell frissítenie a listát.
@@ -456,22 +457,11 @@ class _EventFormState extends ConsumerState<_EventForm> {
               // Meglévő eseménynél is itt van: amit ide írnak, az a meglévő
               // meghívottak MELLÉ kerül (a natív oldal a már meghívottakat
               // kiszűri). A jelenlegi listát a részletek lapja mutatja.
-              TextField(
+              GuestField(
                 controller: _guests,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
+                label: _isEdit ? 'További meghívottak' : 'Meghívottak',
                 // A tájékoztató sáv megjelenése a mező tartalmán múlik.
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  labelText: _isEdit ? 'További meghívottak' : 'Meghívottak',
-                  hintText: 'anna@pelda.hu, bela@pelda.hu',
-                  prefixIcon: const Icon(Icons.group_outlined),
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
+                onChanged: () => setState(() {}),
               ),
               // Csak akkor szólunk, ha tényleg lesz meghívott: a meghívó nem
               // azonnal megy ki, és ezt jobb előre tudni, mint hiába várni rá.

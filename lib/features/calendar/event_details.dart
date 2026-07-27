@@ -7,6 +7,7 @@ import 'calendar_service.dart';
 import 'event_categories.dart';
 import 'event_form.dart';
 import 'event_groups.dart';
+import 'guest_field.dart';
 
 /// Az esemény részletei alulról felcsúszó lapon.
 ///
@@ -260,25 +261,23 @@ class _GuestDialogState extends State<_GuestDialog> {
     void submit() => Navigator.pop(context, guests);
 
     return AlertDialog(
+      // A javaslat-csipeszek és a billentyűzet mellett a tartalom kis kijelzőn
+      // magasabb lehet, mint a hely: így görgethető lesz, nem fut ki.
+      scrollable: true,
       title: const Text('Meghívás'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
+          GuestField(
             controller: _input,
+            label: 'E-mail cím',
             autofocus: true,
-            keyboardType: TextInputType.emailAddress,
-            autocorrect: false,
-            textInputAction: TextInputAction.done,
-            onChanged: (_) => setState(() {}),
-            onSubmitted: (_) {
+            // A „Meghívás" gomb a felismert címek meglétén múlik.
+            onChanged: () => setState(() {}),
+            onSubmitted: () {
               if (guests.isNotEmpty) submit();
             },
-            decoration: const InputDecoration(
-              labelText: 'E-mail cím',
-              hintText: 'anna@pelda.hu, bela@pelda.hu',
-            ),
           ),
           const SizedBox(height: 14),
           Text(
