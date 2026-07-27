@@ -54,6 +54,7 @@ class MainActivity : FlutterActivity() {
                     "attendees" -> handleAttendees(call, result)
                     "addGuests" -> handleAddGuests(call, result)
                     "knownGuests" -> handleKnownGuests(result)
+                    "syncCalendars" -> handleSyncCalendars(result)
                     "updateEvent" -> handleUpdateEvent(call, result)
                     "deleteEvent" -> handleDeleteEvent(call, result)
                     "pickTextFile" -> handlePickTextFile(result)
@@ -322,6 +323,25 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             result.error("QUERY_FAILED", e.message, null)
         }
+    }
+
+    /**
+     * Friss szinkron kérése a naptárfiókoktól (lásd [requestCalendarSync]) — a
+     * lehúzós frissítés és a meghívottak lapja ezzel kezdi.
+     *
+     * Sosem ad hibát: a szinkron kérése kényelmi lépés, engedély vagy hálózat
+     * híján egyszerűen nem történik semmi, és a hívó a helyi adatot mutatja
+     * tovább. Engedélyt sem kérünk érte — az olvasáskor amúgy is előjön.
+     */
+    private fun handleSyncCalendars(result: MethodChannel.Result) {
+        if (has(Manifest.permission.READ_CALENDAR)) {
+            try {
+                contentResolver.requestCalendarSync()
+            } catch (e: Exception) {
+                // Szándékosan elnyelve — lásd a fenti magyarázatot.
+            }
+        }
+        result.success(null)
     }
 
     /** Egy esemény meghívottai és a válaszuk — a részletek lapja mutatja. */

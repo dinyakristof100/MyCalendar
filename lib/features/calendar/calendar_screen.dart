@@ -132,7 +132,12 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
         child: const Icon(Icons.add),
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.refresh(monthEventsProvider(_month).future),
+        // Előbb szinkron, utána olvasás: a naptártábla csak tükör, a puszta
+        // újraolvasás a régi állapotot adná vissza (lásd [syncCalendars]).
+        onRefresh: () async {
+          await syncCalendars();
+          return ref.refresh(monthEventsProvider(_month).future);
+        },
         child: GestureDetector(
           onHorizontalDragEnd: _onSwipe,
           child: switch (async) {

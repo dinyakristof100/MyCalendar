@@ -154,12 +154,13 @@ void main() {
   test('meghívottak: a lap újranyitása friss választ mutat, nem a cache-t', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     var status = 'pending';
-    var calls = 0;
+    final methods = <String>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('mycalendar/device_calendar'),
           (call) async {
-            calls++;
+            methods.add(call.method);
+            if (call.method != 'attendees') return null;
             return [_raw(email: 'anna@pelda.hu', status: status)];
           },
         );
@@ -167,12 +168,17 @@ void main() {
     final container = ProviderContainer();
     addTearDown(container.dispose);
 
-    // Ahogy a részletek lapja nézi, amíg nyitva van.
+    // Ahogy a részletek lapja nézi, amíg nyitva van: az első kiadás azonnal jön.
     final open = container.listen(eventGuestsProvider('42'), (_, _) {});
     expect(
       (await container.read(eventGuestsProvider('42').future)).single.status,
       GuestStatus.pending,
     );
+
+    // A válaszra várva friss szinkront kérünk — enélkül a naptártábla órákig a
+    // régi állapotot mutatná.
+    await Future<void>.delayed(Duration.zero);
+    expect(methods, contains('syncCalendars'));
 
     // A lap bezárul, közben megjön a válasz a szinkronnal.
     open.close();
@@ -180,11 +186,40 @@ void main() {
     status = 'accepted';
 
     // Újranyitás: friss lekérdezés, nem a régi eredmény.
+    final reopened = container.listen(eventGuestsProvider('42'), (_, _) {});
+    addTearDown(reopened.close);
     expect(
       (await container.read(eventGuestsProvider('42').future)).single.status,
       GuestStatus.accepted,
     );
-    expect(calls, 2);
+    expect(methods.where((method) => method == 'attendees'), hasLength(2));
+  });
+
+  test('meghívottak: ha mindenki válaszolt, nem kérünk szinkront', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final methods = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('mycalendar/device_calendar'),
+          (call) async {
+            methods.add(call.method);
+            if (call.method != 'attendees') return null;
+            return [
+              _raw(email: 'szervezo@pelda.hu', organizer: true),
+              _raw(email: 'anna@pelda.hu', status: 'accepted'),
+            ];
+          },
+        );
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final open = container.listen(eventGuestsProvider('42'), (_, _) {});
+    addTearDown(open.close);
+    await container.read(eventGuestsProvider('42').future);
+    await Future<void>.delayed(Duration.zero);
+
+    // A szervező „nem válaszolt" státusza nem ok a szinkronra — ő nem válaszol.
+    expect(methods, isNot(contains('syncCalendars')));
   });
 
   test('meglévő eseményhez meghívás: id + címek mennek át', () async {

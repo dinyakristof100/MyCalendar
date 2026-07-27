@@ -1,7 +1,9 @@
 package com.mycalendar.my_calendar
 
+import android.accounts.Account
 import android.content.ContentResolver
 import android.content.ContentUris
+import android.os.Bundle
 import android.provider.CalendarContract
 
 /**
@@ -123,6 +125,54 @@ fun ContentResolver.queryKnownGuests(): List<String> {
     return counts.entries
         .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
         .map { it.key }
+}
+
+/**
+ * Friss szinkron kérése a naptárfiókoktól.
+ *
+ * A naptártábla a készüléken csak TÜKÖR: a meghívottak válaszát a Google
+ * szinkronja írja bele. Az app eddig sosem kért szinkront, csak olvasta a
+ * tükröt — a háttérszinkron viszont órákat is késhet (Doze, gyártói
+ * energiakezelés). Így maradhatott a lapon „még nem válaszolt" olyan
+ * meghívottnál, aki a Google szerverén rég elfogadta a meghívót.
+ *
+ * `SYNC_EXTRAS_MANUAL` + `SYNC_EXTRAS_EXPEDITED`: a felhasználó ott áll a
+ * képernyő előtt és most várja az adatot — az ilyen kérést az Android soron
+ * kívül futtatja, nem halogatja a szokásos ütemezéssel.
+ *
+ * Fiókonként (nem naptáranként) egy kérés: egy fiókhoz több naptár is tartozik
+ * (ünnepnapok, órarend), a szinkron viszont a fiók egészére fut.
+ *
+ * Nem várunk a végére: a szinkron a saját szálán dolgozik, az eredménye a
+ * naptártáblába kerül — a hívó dolga újra lekérdezni (lásd a Dart oldali
+ * `eventGuestsProvider`-t).
+ */
+fun ContentResolver.requestCalendarSync() {
+    val extras = Bundle().apply {
+        putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+        putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+    }
+    val accounts = mutableSetOf<Pair<String, String>>()
+    query(
+        CalendarContract.Calendars.CONTENT_URI,
+        arrayOf(
+            CalendarContract.Calendars.ACCOUNT_NAME,
+            CalendarContract.Calendars.ACCOUNT_TYPE,
+        ),
+        // A fiók nélküli, helyi naptárnak nincs mit szinkronizálnia.
+        "${CalendarContract.Calendars.ACCOUNT_TYPE} != ?",
+        arrayOf(CalendarContract.ACCOUNT_TYPE_LOCAL),
+        null,
+    )?.use { cursor ->
+        while (cursor.moveToNext()) {
+            val name = cursor.getString(0) ?: continue
+            val type = cursor.getString(1) ?: continue
+            accounts.add(name to type)
+        }
+    }
+    for ((name, type) in accounts) {
+        ContentResolver.requestSync(Account(name, type), CalendarContract.AUTHORITY, extras)
+    }
 }
 
 /** A meghívott válasza szövegesen. Ami nem ismerhető fel, az „nem válaszolt". */

@@ -103,7 +103,12 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
         child: const Icon(Icons.add),
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.refresh(upcomingEventsProvider.future),
+        // Előbb szinkron, utána olvasás: a naptártábla csak tükör, a puszta
+        // újraolvasás a régi állapotot adná vissza (lásd [syncCalendars]).
+        onRefresh: () async {
+          await syncCalendars();
+          return ref.refresh(upcomingEventsProvider.future);
+        },
         child: CustomScrollView(
           slivers: [
             switch (events) {

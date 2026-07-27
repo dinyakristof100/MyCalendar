@@ -197,6 +197,29 @@ final knownGuestsProvider = FutureProvider<List<String>>((ref) async {
 Future<void> addGuests(String eventId, List<String> guests) =>
     _channel.invokeMethod<void>('addGuests', {'id': eventId, 'guests': guests});
 
+/// Ennyi idő alatt ér be egy soron kívüli szinkron válasza a naptártáblába. A
+/// Google-szinkron jellemzően 1–3 másodperc alatt lefut.
+const _syncWait = Duration(seconds: 3);
+
+/// Friss szinkron kérése a naptárfiókoktól, majd várakozás, amíg a válasz beér
+/// a naptártáblába (lásd `CalendarQuery.requestCalendarSync`).
+///
+/// Ez a „frissítés" IGAZI fele. A készüléken lévő naptártábla csak tükör: a
+/// meghívottak válaszát és a máshol felvett eseményeket a Google szinkronja
+/// írja bele, ami a háttérben órákat is késhet. Az újraolvasás enélkül
+/// ugyanazt a régi állapotot adná vissza — pontosan ezt látta a felhasználó,
+/// amikor a meghívott már elfogadta, de a lap még „még nem válaszolt"-at írt.
+///
+/// ponytail: fix idejű várakozás, nem a szinkron tényleges végét figyeljük. A
+/// pontos jelzés `ContentResolver.addStatusChangeListener` volna a natív
+/// oldalon, egy csatornán visszaszólva — ha a 3 másodperc kevésnek bizonyul,
+/// ott a helye. Addig is: ami később ér be, azt a következő frissítés (vagy a
+/// lap újranyitása) mutatja meg.
+Future<void> syncCalendars() async {
+  await _channel.invokeMethod<void>('syncCalendars');
+  await Future<void>.delayed(_syncWait);
+}
+
 /// A meghívott válasza. A `pending` gyűjti a „meghívtuk, de nem válaszolt" és a
 /// hiányzó státuszt is — a felhasználónak ez ugyanaz az információ.
 enum GuestStatus { accepted, declined, tentative, pending }
@@ -241,15 +264,38 @@ EventGuest parseGuest(Map<String, Object?> raw) => EventGuest(
 /// Családi provider: minden esemény a saját id-jével kéri, és a részletek lapja
 /// csak arra az egyre fizet lekérdezést, amit épp megnyitottak.
 ///
+/// Stream, nem Future — két lépésben ad választ:
+/// 1. azonnal kiadja, amit a naptártábla MOST tud (a lap nem várakozik),
+/// 2. ha valaki még nem válaszolt, kér egy friss szinkront ([syncCalendars]),
+///    és a beérkező adattal újra kiadja a listát.
+/// Így a válasz magától megjelenik a nyitott lapon, nem kell újranyitni.
+///
 /// `isAutoDispose`: a lap bezárásakor eldobja magát, tehát a következő
 /// megnyitás ÚJRA lekérdezi a naptárat. Enélkül (ez a Riverpod alapértelmezése)
-/// az első lekérdezés eredménye az app futásának végéig megmaradt: a meghívott
-/// időközben elfogadhatta a meghívót, a lap akkor is „még nem válaszolt"-at
-/// mutatott, mert a listák frissítése ezt a providert nem érintette.
-final eventGuestsProvider = FutureProvider.family<List<EventGuest>, String>((
+/// az első lekérdezés eredménye az app futásának végéig megmaradt.
+final eventGuestsProvider = StreamProvider.family<List<EventGuest>, String>((
   ref,
   eventId,
-) async {
+) async* {
+  final guests = await _attendees(eventId);
+  yield guests;
+
+  // Nincs kire várni: nincs meghívott, vagy már mindenki válaszolt. (A
+  // szervező nem válaszol a saját eseményére.)
+  final waiting = guests.any(
+    (guest) => !guest.organizer && guest.status == GuestStatus.pending,
+  );
+  if (!waiting) return;
+
+  await syncCalendars();
+  yield await _attendees(eventId);
+  // ponytail: még egy esély a lassabb szinkronnak, aztán feladjuk — a lap
+  // újranyitása úgyis friss lekérdezés (lásd `isAutoDispose`).
+  await Future<void>.delayed(_syncWait * 2);
+  yield await _attendees(eventId);
+}, isAutoDispose: true);
+
+Future<List<EventGuest>> _attendees(String eventId) async {
   final raw = await _channel.invokeMethod<List<Object?>>('attendees', {
     'id': eventId,
   });
@@ -257,7 +303,7 @@ final eventGuestsProvider = FutureProvider.family<List<EventGuest>, String>((
     for (final guest in raw ?? const <Object?>[])
       parseGuest((guest! as Map).cast<String, Object?>()),
   ];
-}, isAutoDispose: true);
+}
 
 /// Egy naptáresemény annyi mezővel, amennyit az app tényleg használ.
 class CalendarEvent {
