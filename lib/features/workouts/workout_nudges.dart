@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/notifications.dart';
+import '../settings/settings_screen.dart';
 import 'motivation.dart';
 import 'streak.dart';
 import 'workout_plans.dart';
@@ -16,6 +17,9 @@ final workoutNudgeSyncProvider = Provider<void>((ref) {
   final plan = ref.watch(workoutPlansProvider).active;
   syncWorkoutNudges(
     plan: plan,
+    // A kapcsolót is figyeljük: kikapcsoláskor ez a sync viszi le a már
+    // beütemezett esti kérdéseket, bekapcsoláskor ugyanez rakja vissza őket.
+    enabled: ref.watch(notificationsProvider).workout,
     // A hét „lezárva", ha minden nap leedzve VAGY szándékosan kihagyva — a
     // skippelt napra nincs mit kérdezni, az áthozottra viszont van.
     weekResolved:
@@ -62,22 +66,24 @@ const _details = NotificationDetails(
 
 /// Beütemezi az esti kérdést a következő [_horizonDays] napra.
 ///
-/// Csak akkor kérdez, ha van aktív terv, és a hét még nincs lezárva: a letudott
-/// (leedzett vagy kihagyott) hét hátralévő napjait kihagyjuk, a következő hetet
-/// viszont már ütemezzük.
+/// Csak akkor kérdez, ha [enabled] (a beállításokbeli kapcsoló), van aktív terv,
+/// és a hét még nincs lezárva: a letudott (leedzett vagy kihagyott) hét
+/// hátralévő napjait kihagyjuk, a következő hetet viszont már ütemezzük.
 Future<void> syncWorkoutNudges({
   required WorkoutPlan? plan,
   required bool weekResolved,
+  bool enabled = true,
   int streak = 0,
   DateTime? now,
 }) async {
   final from = now ?? DateTime.now();
 
-  // Előbb mindig tiszta lap: a terv és a teljesítés is változhatott.
+  // Előbb mindig tiszta lap: a terv és a teljesítés is változhatott. Kikapcsolt
+  // kapcsolónál ennyi a dolgunk — a már kiütemezett kérdések is elmennek.
   for (var day = 0; day < _horizonDays; day++) {
     await notifications.cancel(id: workoutIdBase + day);
   }
-  if (plan == null) return;
+  if (!enabled || plan == null) return;
 
   final weekDone = weekResolved;
   final nextWeek = weekStartOf(from).add(const Duration(days: 7));

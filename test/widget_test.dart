@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_calendar/app.dart';
+import 'package:my_calendar/core/notifications.dart';
 import 'package:my_calendar/features/auth/auth_controller.dart';
 import 'package:my_calendar/features/calendar/calendar_service.dart';
 import 'package:my_calendar/features/calendar/event_groups.dart';
@@ -186,6 +187,32 @@ void main() {
       final reopened = ProviderContainer();
       addTearDown(reopened.dispose);
       expect(reopened.read(timeKeyboardProvider), isFalse);
+    },
+  );
+
+  test(
+    'az értesítés-kapcsolók alapból be vannak kapcsolva, és megmaradnak',
+    () async {
+      addTearDown(() => prefs.remove(hourBeforeKey));
+      // Mentett érték nélkül mindhárom kapcsoló be van kapcsolva.
+      final first = ProviderContainer();
+      addTearDown(first.dispose);
+      expect(first.read(notificationsProvider), (
+        dayBefore: true,
+        hourBefore: true,
+        workout: true,
+      ));
+
+      await first
+          .read(notificationsProvider.notifier)
+          .set(hourBeforeKey, false);
+      expect(first.read(notificationsProvider).hourBefore, isFalse);
+
+      // Új munkamenet (friss container) a mentett értéket olvassa vissza.
+      final reopened = ProviderContainer();
+      addTearDown(reopened.dispose);
+      expect(reopened.read(notificationsProvider).hourBefore, isFalse);
+      expect(reopened.read(notificationsProvider).dayBefore, isTrue);
     },
   );
 

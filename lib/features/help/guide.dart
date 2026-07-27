@@ -53,7 +53,8 @@ const guideTopics = <GuideTopic>[
         'Az órát alapból begépeled; ha inkább a grafikus órát tekernéd, a '
         'Beállítások → Események alatt átkapcsolhatod. A mentés a telefonod '
         'naptárába írja az eseményt, és emlékeztetőt is kapsz róla: egy '
-        'nappal és egy órával előtte.',
+        'nappal és egy órával előtte. Ezeket — és az esti edzés-kérdést — a '
+        'Beállítások → Értesítések alatt külön-külön ki is kapcsolhatod.',
   ),
   GuideTopic(
     icon: Icons.calendar_month_outlined,

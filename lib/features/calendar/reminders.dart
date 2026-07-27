@@ -38,7 +38,8 @@ const _details = NotificationDetails(
 
 /// Egy esemény emlékeztetői: 24 órával előtte, és időpontos eseménynél egy
 /// órával előtte is. A `slot` az azonosító-eltolás (0/1), hogy a két értesítés
-/// ne írja felül egymást.
+/// ne írja felül egymást. Mindkét fajta külön kikapcsolható a beállításokban —
+/// a kikapcsolt ág egyszerűen kimarad a listából.
 ///
 /// A 24 órás emlékeztető fali óra szerint számol (nap − 1), nem 24 óra
 /// kivonásával — így a nyári időszámítás váltásának hetében sem csúszik el egy
@@ -50,31 +51,37 @@ List<({DateTime when, String body, int slot})> remindersFor(
   final start = formatStart(event);
   if (event.allDay) {
     // ponytail: egész napos eseménynél nincs értelmes „egy órával előtte” — a
-    // kezdés helyi éjfél. Marad az egyetlen előző esti emlékeztető.
+    // kezdés helyi éjfél. Marad az egyetlen előző esti emlékeztető, ami a
+    // „nappal előtte" kapcsolóhoz tartozik.
     return [
-      (
-        when: DateTime(at.year, at.month, at.day - 1, _allDayReminderHour),
-        body: 'Holnap — $start',
-        slot: 0,
-      ),
+      if (reminderOn(dayBeforeKey))
+        (
+          when: DateTime(at.year, at.month, at.day - 1, _allDayReminderHour),
+          body: 'Holnap — $start',
+          slot: 0,
+        ),
     ];
   }
   return [
-    (
-      when: DateTime(at.year, at.month, at.day - 1, at.hour, at.minute),
-      body: 'Holnap — $start',
-      slot: 0,
-    ),
-    (
-      when: at.subtract(const Duration(hours: 1)),
-      body: 'Egy óra múlva — $start',
-      slot: 1,
-    ),
+    if (reminderOn(dayBeforeKey))
+      (
+        when: DateTime(at.year, at.month, at.day - 1, at.hour, at.minute),
+        body: 'Holnap — $start',
+        slot: 0,
+      ),
+    if (reminderOn(hourBeforeKey))
+      (
+        when: at.subtract(const Duration(hours: 1)),
+        body: 'Egy óra múlva — $start',
+        slot: 1,
+      ),
   ];
 }
 
-/// Amit legutóbb kiütemeztünk. Lásd [remindersSignature].
-String _scheduled = '';
+/// Amit legutóbb kiütemeztünk. Lásd [remindersSignature]. Kezdetben null, nem
+/// üres string: minden emlékeztető kikapcsolva az ujjlenyomatot is üresre viszi,
+/// és olyankor is le kell futnia a törlésnek.
+String? _scheduled;
 
 /// Az ütemezést meghatározó adatok egy sorban: ha ez nem változott, nincs mit
 /// újraütemezni.

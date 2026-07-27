@@ -12,6 +12,7 @@ import '../calendar/event_details.dart';
 import '../calendar/event_form.dart';
 import '../calendar/event_groups.dart';
 import '../calendar/reminders.dart';
+import '../settings/settings_screen.dart';
 
 const _gutter = 20.0;
 
@@ -77,6 +78,12 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
     // "szinkron": a naptár a forrás, a helyi értesítések csak követik.
     ref.listen(upcomingEventsProvider, (_, next) {
       next.whenData(scheduleReminders);
+    });
+    // Ugyanígy az emlékeztető-kapcsolók átbillentésére: a lista már megvan, csak
+    // a kikapcsolt fajtát kell leszedni (vagy a visszakapcsoltat kirakni). Ez a
+    // képernyő a beállítások fülön is életben marad, tehát azonnal lefut.
+    ref.listen(notificationsProvider, (_, _) {
+      ref.read(upcomingEventsProvider).whenData(scheduleReminders);
     });
 
     final events = ref.watch(upcomingEventsProvider);

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/app_scaffold.dart';
 import '../../core/cloud_sync.dart';
+import '../../core/notifications.dart';
 import '../../core/prefs.dart';
 import '../auth/auth_controller.dart';
 import '../workouts/workout_progress.dart';
@@ -34,6 +35,38 @@ class TimeKeyboardController extends Notifier<bool> {
   Future<void> set(bool on) async {
     state = on;
     await saveSetting(_timeKeyboardKey, on ? 'true' : 'false');
+  }
+}
+
+/// Az értesítés-fajták kapcsolói egy állapotban: a naptáresemény előtt egy
+/// nappal, illetve egy órával szóló emlékeztető, és az esti edzés-kérdés.
+/// Alapból mindhárom be van kapcsolva (lásd [reminderOn]).
+///
+/// ponytail: egy provider három kapcsolóra — külön controller-osztályokból
+/// három egyforma másolat lenne. A rekord szerkezeti egyenlőséget ad, tehát
+/// változatlan értékre nincs felesleges újraépítés.
+final notificationsProvider =
+    NotifierProvider<
+      NotificationsController,
+      ({bool dayBefore, bool hourBefore, bool workout})
+    >(NotificationsController.new);
+
+class NotificationsController
+    extends Notifier<({bool dayBefore, bool hourBefore, bool workout})> {
+  @override
+  ({bool dayBefore, bool hourBefore, bool workout}) build() => (
+    dayBefore: reminderOn(dayBeforeKey),
+    hourBefore: reminderOn(hourBeforeKey),
+    workout: reminderOn(workoutNudgeKey),
+  );
+
+  /// A [key] a három beállításkulcs valamelyike. Az újraütemezés máshol
+  /// történik: az esti kérdéseket a `workoutNudgeSyncProvider`, az
+  /// esemény-emlékeztetőket az eseményképernyő figyeli — mindkettő erre az
+  /// állapotra van feliratkozva.
+  Future<void> set(String key, bool on) async {
+    await saveSetting(key, on ? 'true' : 'false');
+    ref.invalidateSelf();
   }
 }
 
@@ -250,6 +283,9 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (on) => ref.read(timeKeyboardProvider.notifier).set(on),
           ),
           const Divider(height: 24),
+          const _SectionTitle('Értesítések'),
+          const _NotificationSwitches(),
+          const Divider(height: 24),
           const _SectionTitle('Naptárak'),
           ListTile(
             leading: const Icon(Icons.calendar_month_outlined),
@@ -304,6 +340,54 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A három értesítés-kapcsoló. Az esemény-emlékeztetők külön kapcsolhatók, mert
+/// jellemzően más kell belőlük: az egy nappal előbbi tervezéshez, az egy órával
+/// előbbi indulás előtti figyelmeztetésnek.
+class _NotificationSwitches extends ConsumerWidget {
+  const _NotificationSwitches();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(notificationsProvider);
+    final notifier = ref.read(notificationsProvider.notifier);
+
+    return Column(
+      children: [
+        SwitchListTile(
+          secondary: const Icon(Icons.today_outlined),
+          title: const Text('Emlékeztető egy nappal előtte'),
+          subtitle: const Text(
+            'Az esemény előtt 24 órával szólunk. Egész napos eseménynél az '
+            'előző nap este.',
+          ),
+          value: on.dayBefore,
+          onChanged: (v) => notifier.set(dayBeforeKey, v),
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.alarm),
+          title: const Text('Emlékeztető egy órával előtte'),
+          subtitle: const Text(
+            'Az esemény kezdése előtt egy órával szólunk. Egész napos '
+            'eseménynél nincs ilyen.',
+          ),
+          value: on.hourBefore,
+          onChanged: (v) => notifier.set(hourBeforeKey, v),
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.fitness_center_outlined),
+          title: const Text('Esti kérdés az edzésről'),
+          subtitle: const Text(
+            'Este rákérdezünk, hogy megvolt-e a mai edzés — egy koppintással '
+            'pipálhatod.',
+          ),
+          value: on.workout,
+          onChanged: (v) => notifier.set(workoutNudgeKey, v),
+        ),
+      ],
     );
   }
 }

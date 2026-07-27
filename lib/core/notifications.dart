@@ -1,6 +1,8 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 
+import 'prefs.dart';
+
 /// Az app egyetlen értesítés-plugin példánya.
 final notifications = FlutterLocalNotificationsPlugin();
 
@@ -8,6 +10,16 @@ final notifications = FlutterLocalNotificationsPlugin();
 /// az esti edzés-kérdések fölötte. Így az egyik csoport újraütemezése nem
 /// törli a másikat — egy `cancelAll` mindig levinné mindkettőt.
 const workoutIdBase = 1000000;
+
+/// Az értesítés-fajták kapcsolóinak beállításkulcsai. A naptáresemény két
+/// emlékeztetője és az esti edzés-kérdés külön-külön kapcsolható.
+const dayBeforeKey = 'remindDayBefore';
+const hourBeforeKey = 'remindHourBefore';
+const workoutNudgeKey = 'remindWorkout';
+
+/// Be van-e kapcsolva az adott értesítés-fajta. Hiányzó érték = igen; csak a
+/// kifejezett „false" kapcsol ki — mint a többi kapcsolós beállításnál.
+bool reminderOn(String key) => prefs.getString(key) != 'false';
 
 /// Az értesítés-gombok azonosítói. Egy helyen: az ütemezés és a feldolgozás
 /// két külön fájlban van, string-literálként elcsúsznának.

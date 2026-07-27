@@ -30,6 +30,9 @@ const syncedKeys = <String>[
   'workoutProgress', // a hét teljesített napjai
   'carryOverWorkouts', // le nem edzett napok átcsúsztatása
   'workoutStreak', // heti sorozat (hány hét zsinórban)
+  'remindDayBefore', // emlékeztető egy nappal az esemény előtt
+  'remindHourBefore', // emlékeztető egy órával az esemény előtt
+  'remindWorkout', // esti kérdés az edzésről
 ];
 
 /// A `lastActiveAt` minden felhőírásnál a szerveridőre frissül. Automatikus
@@ -114,6 +117,7 @@ final cloudSyncProvider = Provider<void>((ref) {
       pullFromCloud().then((_) {
         ref.invalidate(appStyleProvider);
         ref.invalidate(timeKeyboardProvider);
+        ref.invalidate(notificationsProvider);
         ref.invalidate(categoriesProvider);
         // A naptárszűrőt az esemény-providerek figyelik: elég ezt frissíteni,
         // a lista és a naptárnézet magától újratölt.
