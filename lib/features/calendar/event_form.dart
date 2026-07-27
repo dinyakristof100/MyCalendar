@@ -39,8 +39,9 @@ class _EventFormState extends ConsumerState<_EventForm> {
   final _title = TextEditingController();
 
   /// A meghívottak e-mail címei egy mezőben (lásd [parseGuestEmails]). Csak új
-  /// eseménynél: meglévőhöz vendéget a Naptárban lehet hívni, mert a meghívó
-  /// kiküldése nem a mi dolgunk.
+  /// eseménynél van itt: meglévőhöz a részletek lapján a „Meghívás" gomb visz a
+  /// Naptárba (lásd [inviteToEvent]) — ott az `ACTION_EDIT` nem garantálja az
+  /// előre kitöltött vendéglistát, ezért ott nem is kérjük be.
   final _guests = TextEditingController();
 
   late DateTime _start;

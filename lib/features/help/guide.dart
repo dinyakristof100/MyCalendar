@@ -65,7 +65,9 @@ const guideTopics = <GuideTopic>[
         'alkalmazásában fejeződik be: az küldi ki a meghívót, amit a másik fél '
         'elfogadhat vagy elutasíthat. Ha elfogadta, ugyanaz az esemény jelenik '
         'meg nála is, és amit bármelyikőtök módosít, azt a többiek is látják. '
-        'Ki mit válaszolt, az esemény részleteinél olvasható.',
+        'Már meglévő eseményhez is hívhatsz valakit: nyisd meg az eseményt, és '
+        'a „Meghívás” gombbal a Naptárban add meg a címét. Ki mit válaszolt, az '
+        'esemény részleteinél olvasható.',
   ),
   GuideTopic(
     icon: Icons.calendar_month_outlined,

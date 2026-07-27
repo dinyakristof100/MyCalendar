@@ -156,6 +156,25 @@ Future<void> createEventWithGuests({
   ..._when(start, end, allDay),
 });
 
+/// Meglévő esemény megnyitása a naptáralkalmazás szerkesztőjében, hogy a
+/// felhasználó meghívottat adhasson hozzá (lásd
+/// `MainActivity.handleInviteToEvent`).
+///
+/// Miért nem a mi mezőnkbe írja a címeket? Mert az `ACTION_EDIT` nem garantálja a
+/// vendéglista átvételét, és a csendben eldobott meghívó a legrosszabb kimenet: a
+/// felhasználó azt hinné, elküldte. Új eseménynél ez nem gond, ott az
+/// `ACTION_INSERT` dokumentáltan átveszi ([createEventWithGuests]).
+///
+/// A válaszok utána maguktól megjelennek az [eventGuestsProvider]-ben.
+Future<void> inviteToEvent(CalendarEvent event) =>
+    _channel.invokeMethod<void>('inviteToEvent', {
+      'id': event.id,
+      // Az ismétlődő esemény melyik előfordulása. Egész naposnál a naptár UTC
+      // éjfelet vár — a modellben viszont helyi dátum áll (lásd [parseEvent]).
+      'begin': (event.allDay ? utcMidnight(event.at) : event.at)
+          .millisecondsSinceEpoch,
+    });
+
 /// A meghívott válasza. A `pending` gyűjti a „meghívtuk, de nem válaszolt" és a
 /// hiányzó státuszt is — a felhasználónak ez ugyanaz az információ.
 enum GuestStatus { accepted, declined, tentative, pending }

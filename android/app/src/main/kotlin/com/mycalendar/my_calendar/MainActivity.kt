@@ -54,6 +54,7 @@ class MainActivity : FlutterActivity() {
                     "createEvent" -> handleCreateEvent(call, result)
                     "createEventWithGuests" -> handleCreateEventWithGuests(call, result)
                     "attendees" -> handleAttendees(call, result)
+                    "inviteToEvent" -> handleInviteToEvent(call, result)
                     "updateEvent" -> handleUpdateEvent(call, result)
                     "deleteEvent" -> handleDeleteEvent(call, result)
                     "pickTextFile" -> handlePickTextFile(result)
@@ -271,6 +272,40 @@ class MainActivity : FlutterActivity() {
             result.error("NO_CALENDAR_APP", "Nincs naptáralkalmazás a készüléken.", null)
         } catch (e: Exception) {
             result.error("INSERT_FAILED", e.message, null)
+        }
+    }
+
+    /**
+     * Meglévő esemény megnyitása a naptáralkalmazás szerkesztőjében, hogy a
+     * felhasználó meghívottat adhasson hozzá.
+     *
+     * Itt szándékosan nincs előre kitöltött vendéglista: az `EXTRA_EMAIL` csak az
+     * `ACTION_INSERT`-nél dokumentált, `ACTION_EDIT`-nél a Naptár csendben
+     * eldobhatná — a felhasználó pedig azt hinné, kiküldte a meghívót. A címeket
+     * ezért ott írja be, és a meghívó kiküldését (plusz a vendég-jogosultságokat
+     * és a „szóljunk a meghívottaknak?" kérdést) is az kezeli.
+     *
+     * A kezdés átadása az ismétlődő eseményekhez kell: ebből tudja a Naptár,
+     * melyik előfordulást nyitja meg. A véget és az egész napos jelleget nem
+     * küldjük — azokat a Naptár előtöltésnek vehetné, és egy hibás vég felülírná
+     * a meglévő adatot.
+     */
+    private fun handleInviteToEvent(call: MethodCall, result: MethodChannel.Result) {
+        try {
+            val id = call.argument<String>("id")!!.toLong()
+            startActivity(
+                Intent(Intent.ACTION_EDIT)
+                    .setData(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, id))
+                    .putExtra(
+                        CalendarContract.EXTRA_EVENT_BEGIN_TIME,
+                        call.argument<Number>("begin")!!.toLong(),
+                    ),
+            )
+            result.success(null)
+        } catch (e: ActivityNotFoundException) {
+            result.error("NO_CALENDAR_APP", "Nincs naptáralkalmazás a készüléken.", null)
+        } catch (e: Exception) {
+            result.error("EDIT_FAILED", e.message, null)
         }
     }
 

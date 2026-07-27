@@ -82,7 +82,8 @@ class _EventDetails extends ConsumerWidget {
               if (event.recurring)
                 const _Detail(
                   icon: Icons.repeat_rounded,
-                  text: 'Ismétlődő esemény — a szerkesztés és a törlés a '
+                  text:
+                      'Ismétlődő esemény — a szerkesztés és a törlés a '
                       'sorozat minden előfordulására érvényes',
                 ),
               if (event.location case final location?)
@@ -106,7 +107,15 @@ class _EventDetails extends ConsumerWidget {
                       label: const Text('Szerkesztés'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _invite(context),
+                      icon: const Icon(Icons.person_add_alt, size: 18),
+                      label: const Text('Meghívás'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
                   IconButton(
                     onPressed: () => _delete(context, ref),
                     icon: const Icon(Icons.delete_outline),
@@ -133,6 +142,26 @@ class _EventDetails extends ConsumerWidget {
     if (context.mounted) Navigator.pop(context);
   }
 
+  /// Meghívás: az esemény a telefon Naptár alkalmazásának szerkesztőjében
+  /// nyílik, a címeket ott adja meg a felhasználó (lásd [inviteToEvent]).
+  ///
+  /// A lapot bezárjuk: visszatérve újranyitva a meghívottak listája friss lesz
+  /// (a provider a lap bezárásakor eldobódik), az esemény listáit pedig a
+  /// képernyők `AppLifecycleListener`-e magától újratölti.
+  Future<void> _invite(BuildContext context) async {
+    try {
+      await inviteToEvent(event);
+      if (context.mounted) Navigator.pop(context);
+    } on PlatformException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Nem sikerült megnyitni a naptárban: ${e.message}'),
+        ),
+      );
+    }
+  }
+
   /// ponytail: ismétlődőnél csak a teljes sorozat törlése megy — az `id` a
   /// sorozat sora. Az „csak ez az előfordulás" ág egy EXDATE hozzáfűzése volna
   /// a sorhoz; addig a párbeszéd megmondja, mi fog történni.
@@ -140,9 +169,7 @@ class _EventDetails extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          event.recurring ? 'Sorozat törlése' : 'Esemény törlése',
-        ),
+        title: Text(event.recurring ? 'Sorozat törlése' : 'Esemény törlése'),
         content: Text(
           event.recurring
               ? 'A(z) „${event.title}" minden előfordulása törlődik, nem csak '
