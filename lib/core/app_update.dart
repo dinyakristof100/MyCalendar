@@ -59,11 +59,23 @@ Future<({String versionName, int versionCode})?> checkForUpdate() async {
   }
 }
 
+/// Fut-e már egy frissítés — letöltés, vagy a rendszer telepítője.
+///
+/// A telepítő és a Play Protect ellenőrzése alatt az app `resume`-ot kap, az
+/// pedig újra felajánlaná ugyanazt a verziót (telepítve még nincs) — a
+/// türelmetlen felhasználó így indítana egy második letöltést. Amíg ez igaz,
+/// nem ajánlunk semmit.
+///
+/// Sikeres telepítéskor a folyamat úgyis lecserélődik; ha a felhasználó
+/// elutasítja a rendszer telepítőjét, a következő appindítás megint felajánlja.
+bool _updateInFlight = false;
+
 /// Megnyitáskor: ha van újabb kiadás, felajánlja, és elfogadásra le is futtatja a
 /// frissítést. Bárhol hiba/nincs újdonság → csendben nem történik semmi.
 Future<void> maybePromptUpdate(BuildContext context) async {
+  if (_updateInFlight) return;
   final info = await checkForUpdate();
-  if (info == null || !context.mounted) return;
+  if (info == null || !context.mounted || _updateInFlight) return;
 
   final accepted = await showDialog<bool>(
     context: context,
@@ -86,6 +98,7 @@ Future<void> maybePromptUpdate(BuildContext context) async {
     ),
   );
   if ((accepted ?? false) && context.mounted) {
+    _updateInFlight = true;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -97,8 +110,10 @@ Future<void> maybePromptUpdate(BuildContext context) async {
 /// Letöltés-folyamat, majd átadás a rendszer telepítőjének.
 ///
 /// A haladást az [OtaUpdate] eseményfolyamából olvassuk. `INSTALLING`-nál az OS
-/// telepítője veszi át, ezért bezárjuk a párbeszédet; hibánál is bezárjuk, egy
-/// visszajelzéssel — a felhasználó a régi verzión marad, semmi sem törik.
+/// telepítője veszi át — a párbeszéd ilyenkor is nyitva marad (csak a „Bezárás"
+/// gomb viszi el), mert a rendszer ablaka pár másodperc késéssel jön. Hibánál
+/// bezárjuk, egy visszajelzéssel: a felhasználó a régi verzión marad, semmi sem
+/// törik.
 class _UpdateProgressDialog extends StatefulWidget {
   const _UpdateProgressDialog();
 
@@ -109,6 +124,10 @@ class _UpdateProgressDialog extends StatefulWidget {
 class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
   double? _progress;
   String _label = 'Letöltés előkészítése…';
+
+  /// A rendszer telepítője átvette. Ilyenkor a párbeszéd bezárható — de csak
+  /// gombbal, és a következő felajánlás így is elmarad ([_updateInFlight]).
+  bool _handedOff = false;
 
   @override
   void initState() {
@@ -141,14 +160,25 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
       case OtaStatus.INSTALLING:
       case OtaStatus.INSTALLATION_DONE:
         // A rendszer telepítője átveszi (és sikeres telepítéskor lecseréli az
-        // appot) — a saját párbeszédünkre innen már nincs szükség.
-        Navigator.of(context).maybePop();
+        // appot). NEM zárjuk be a párbeszédet: a telepítő ablaka csak pár
+        // másodperc múlva ugrik fel — a Play Protect addig ellenőriz —, és a
+        // felszabaduló felületen a türelmetlen felhasználó újrakezdené az
+        // egészet.
+        setState(() {
+          _handedOff = true;
+          _progress = 1;
+          _label =
+              'Letöltve. A telepítést a rendszer végzi — ha nem ugrik fel '
+              'azonnal, még tart a Play Protect ellenőrzése.';
+        });
       default:
         _fail(); // engedélyhiány, letöltési hiba, checksum stb.
     }
   }
 
   void _fail() {
+    // Nem sikerült: szabad az út egy újabb próbálkozásnak.
+    _updateInFlight = false;
     if (!mounted) return;
     Navigator.of(context).maybePop();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -158,15 +188,27 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
     );
   }
 
+  // A vissza gomb sem zárja be: a letöltés natívan futna tovább, a felhasználó
+  // pedig a szabaddá vált felületről indíthatna egy másodikat.
   @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Frissítés'),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        LinearProgressIndicator(value: _progress),
-        const SizedBox(height: 14),
-        Text(_label),
+  Widget build(BuildContext context) => PopScope(
+    canPop: false,
+    child: AlertDialog(
+      title: const Text('Frissítés'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          LinearProgressIndicator(value: _progress),
+          const SizedBox(height: 14),
+          Text(_label),
+        ],
+      ),
+      actions: [
+        if (_handedOff)
+          TextButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: const Text('Bezárás'),
+          ),
       ],
     ),
   );
