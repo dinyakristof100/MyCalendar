@@ -240,6 +240,12 @@ EventGuest parseGuest(Map<String, Object?> raw) => EventGuest(
 ///
 /// Családi provider: minden esemény a saját id-jével kéri, és a részletek lapja
 /// csak arra az egyre fizet lekérdezést, amit épp megnyitottak.
+///
+/// `isAutoDispose`: a lap bezárásakor eldobja magát, tehát a következő
+/// megnyitás ÚJRA lekérdezi a naptárat. Enélkül (ez a Riverpod alapértelmezése)
+/// az első lekérdezés eredménye az app futásának végéig megmaradt: a meghívott
+/// időközben elfogadhatta a meghívót, a lap akkor is „még nem válaszolt"-at
+/// mutatott, mert a listák frissítése ezt a providert nem érintette.
 final eventGuestsProvider = FutureProvider.family<List<EventGuest>, String>((
   ref,
   eventId,
@@ -251,7 +257,7 @@ final eventGuestsProvider = FutureProvider.family<List<EventGuest>, String>((
     for (final guest in raw ?? const <Object?>[])
       parseGuest((guest! as Map).cast<String, Object?>()),
   ];
-});
+}, isAutoDispose: true);
 
 /// Egy naptáresemény annyi mezővel, amennyit az app tényleg használ.
 class CalendarEvent {

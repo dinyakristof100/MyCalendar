@@ -151,6 +151,42 @@ void main() {
     expect(find.text('anna@pelda.hu'), findsOneWidget);
   });
 
+  test('meghívottak: a lap újranyitása friss választ mutat, nem a cache-t', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    var status = 'pending';
+    var calls = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('mycalendar/device_calendar'),
+          (call) async {
+            calls++;
+            return [_raw(email: 'anna@pelda.hu', status: status)];
+          },
+        );
+
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    // Ahogy a részletek lapja nézi, amíg nyitva van.
+    final open = container.listen(eventGuestsProvider('42'), (_, _) {});
+    expect(
+      (await container.read(eventGuestsProvider('42').future)).single.status,
+      GuestStatus.pending,
+    );
+
+    // A lap bezárul, közben megjön a válasz a szinkronnal.
+    open.close();
+    await Future<void>.delayed(Duration.zero);
+    status = 'accepted';
+
+    // Újranyitás: friss lekérdezés, nem a régi eredmény.
+    expect(
+      (await container.read(eventGuestsProvider('42').future)).single.status,
+      GuestStatus.accepted,
+    );
+    expect(calls, 2);
+  });
+
   test('meglévő eseményhez meghívás: id + címek mennek át', () async {
     TestWidgetsFlutterBinding.ensureInitialized();
     MethodCall? sent;
