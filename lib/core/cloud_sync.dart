@@ -106,8 +106,9 @@ Future<void> pullFromCloud() async {
 }
 
 /// Bejelentkezéskor visszatölti a felhőt, majd a friss értékekkel újraépíti az
-/// érintett providereket. A `main` egyszer beolvassa (mint a nudge-szinkront),
-/// utána a be-/kijelentkezés váltásait követi.
+/// érintett providereket. A `main` egyszer beolvassa, és ennyi is elég: a
+/// törzse nem `watch`-ol semmit, a be-/kijelentkezést a saját `ref.listen`-je
+/// követi. (Ezért kell viszont a nudge-szinkronra feliratkozni — az watch-ol.)
 final cloudSyncProvider = Provider<void>((ref) {
   ref.listen<AsyncValue<AuthUser?>>(currentUserProvider, (prev, next) {
     final signedIn = next.value != null;

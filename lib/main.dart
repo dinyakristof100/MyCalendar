@@ -36,9 +36,13 @@ Future<void> main() async {
           container.read(workoutProgressProvider.notifier).markTodayDone(),
       onSnooze: snoozeReminder,
     );
-    // Egyszeri beolvasás: innentől a terv és a pipák változását követve
-    // újraütemezi az esti kérdéseket.
-    container.read(workoutNudgeSyncProvider);
+    // Feliratkozás, NEM egyszeri beolvasás: a Riverpod csak azt a providert
+    // számolja újra magától, amit valaki figyel (`isActive` = van rá
+    // feliratkozó). Beolvasva egyszer lefutott, aztán a terv, a pipák és az
+    // értesítés-kapcsoló változása már nem ütemezett újra semmit — a felhőből
+    // visszatöltött terv is lemaradt róla, mert az a beolvasás UTÁN érkezik.
+    // A visszaadott előfizetést nem tesszük el: az app futásának végéig kell.
+    container.listen(workoutNudgeSyncProvider, (_, _) {});
     // Ugyanígy egyszer: bejelentkezéskor visszatölti a felhőből a mentett
     // adatokat (kategóriák, edzéstervek, beállítások), és frissen tartja a TTL-t.
     container.read(cloudSyncProvider);
