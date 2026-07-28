@@ -97,6 +97,48 @@ fun ContentResolver.queryAttendees(eventId: Long): List<Map<String, Any?>> {
 }
 
 /**
+ * A megadott eseményekhez az ELFOGADOTT résztvevők, eseményenként: a nevük,
+ * vagy ha a naptár nem tud nevet, az e-mail címük.
+ *
+ * Az [owners] az esemény azonosítóját a saját naptárfiókjához köti
+ * (`OWNER_ACCOUNT`). Ez jellemzően maga a felhasználó — őt kihagyjuk a
+ * listából: a kártyán az a kérdés, ki MÁS lesz még ott.
+ *
+ * Egyetlen lekérdezés az egész ablakra. Eseményenként külön kérdezni (mint a
+ * részletek lapja teszi) itt tucatnyi felesleges olvasás lenne — a lista minden
+ * frissüléskor újraépül.
+ */
+private fun ContentResolver.queryAcceptedGuests(
+    owners: Map<Long, String?>,
+): Map<Long, List<String>> {
+    if (owners.isEmpty()) return emptyMap()
+    val guests = mutableMapOf<Long, MutableList<String>>()
+    query(
+        CalendarContract.Attendees.CONTENT_URI,
+        arrayOf(
+            CalendarContract.Attendees.EVENT_ID,
+            CalendarContract.Attendees.ATTENDEE_NAME,
+            CalendarContract.Attendees.ATTENDEE_EMAIL,
+        ),
+        // Az id-k a saját kurzorunkból jönnek `Long`-ként, tehát a listából
+        // épített `IN (…)` nem lehet befecskendezés.
+        "${CalendarContract.Attendees.EVENT_ID} IN (${owners.keys.joinToString(",")}) AND " +
+            "${CalendarContract.Attendees.ATTENDEE_STATUS} = ?",
+        arrayOf(CalendarContract.Attendees.ATTENDEE_STATUS_ACCEPTED.toString()),
+        null,
+    )?.use { cursor ->
+        while (cursor.moveToNext()) {
+            val eventId = cursor.getLong(0)
+            val email = cursor.getString(2)
+            if (email != null && email.equals(owners[eventId], ignoreCase = true)) continue
+            val label = cursor.getString(1)?.trim()?.ifEmpty { null } ?: email ?: continue
+            guests.getOrPut(eventId) { mutableListOf() }.add(label)
+        }
+    }
+    return guests
+}
+
+/**
  * Az eddig ismert meghívottak e-mail címei: minden cím, ami a naptár
  * meghívott-táblájában szerepel — akit valaha meghívtunk, és aki minket hívott
  * meg, plusz a közös események többi résztvevője.
@@ -215,6 +257,9 @@ fun ContentResolver.queryInstances(
         CalendarContract.Instances.EVENT_LOCATION,
         // Ebből tudja a UI, hogy a szerkesztés/törlés egy egész sorozatra hat.
         CalendarContract.Instances.RRULE,
+        // Az esemény naptárának fiókja — ehhez képest „másik" résztvevő a többi
+        // meghívott (lásd [queryAcceptedGuests]).
+        CalendarContract.Instances.OWNER_ACCOUNT,
     )
     val selection = if (calendarIds.isNullOrEmpty()) {
         null
@@ -222,7 +267,10 @@ fun ContentResolver.queryInstances(
         "${CalendarContract.Instances.CALENDAR_ID} IN (${calendarIds.joinToString(",")})"
     }
 
-    val events = mutableListOf<Map<String, Any?>>()
+    val events = mutableListOf<MutableMap<String, Any?>>()
+    // Eseményenként a naptár fiókja. Ismétlődőnél minden előfordulás ugyanaz az
+    // esemény, tehát a map magától összevonja őket.
+    val owners = mutableMapOf<Long, String?>()
     query(
         uri,
         projection,
@@ -231,9 +279,11 @@ fun ContentResolver.queryInstances(
         "${CalendarContract.Instances.BEGIN} ASC",
     )?.use { cursor ->
         while (cursor.moveToNext()) {
+            val eventId = cursor.getLong(0)
+            owners[eventId] = cursor.getString(8)
             events.add(
-                mapOf(
-                    "id" to cursor.getLong(0).toString(),
+                mutableMapOf(
+                    "id" to eventId.toString(),
                     "title" to cursor.getString(1),
                     "begin" to cursor.getLong(2),
                     "allDay" to (cursor.getInt(3) == 1),
@@ -241,8 +291,17 @@ fun ContentResolver.queryInstances(
                     "description" to cursor.getString(5),
                     "location" to cursor.getString(6),
                     "rrule" to cursor.getString(7),
+                    // Az elfogadott résztvevők egy lekérdezésből, alább.
+                    "guests" to emptyList<String>(),
                 ),
             )
+        }
+    }
+
+    val guests = queryAcceptedGuests(owners)
+    if (guests.isNotEmpty()) {
+        for (event in events) {
+            event["guests"] = guests[(event["id"] as String).toLong()] ?: continue
         }
     }
     return events

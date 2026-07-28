@@ -316,6 +316,7 @@ class CalendarEvent {
     this.description,
     this.location,
     this.rrule,
+    this.guests = const [],
   });
 
   /// Az esemény **sorának** azonosítója (`Instances.EVENT_ID`), nem az egyes
@@ -335,6 +336,15 @@ class CalendarEvent {
 
   /// A sorozat ismétlődési szabálya, ha ez egy ismétlődő esemény előfordulása.
   final String? rrule;
+
+  /// Akik ELFOGADTÁK a meghívást — a nevük, név híján az e-mail címük. A saját
+  /// fiókunk nincs köztük (lásd `CalendarQuery.queryAcceptedGuests`), tehát a
+  /// lista pontosan azt mondja meg, ki lesz még ott. Üres a legtöbb eseménynél.
+  ///
+  /// A meghívottak TELJES listája (a még nem válaszolókkal, a válaszukkal) a
+  /// részletek lapján van, az [eventGuestsProvider]-ből — az eseménylistának
+  /// csak ez a rövid névsor kell.
+  final List<String> guests;
 
   /// Ismétlődő-e — a szerkesztés és a törlés ilyenkor az egész sorozatra hat,
   /// ezért a UI figyelmeztet.
@@ -372,6 +382,9 @@ CalendarEvent parseEvent(Map<String, Object?> raw) {
     description: _text(raw['description']),
     location: _text(raw['location']),
     rrule: _text(raw['rrule']),
+    guests: [
+      for (final guest in (raw['guests'] as List?) ?? const []) ?_text(guest),
+    ],
   );
 }
 

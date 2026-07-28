@@ -316,6 +316,10 @@ class _NextUpCard extends ConsumerWidget {
                     ),
                   ],
                 ),
+                if (event.guests.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _Guests(guests: event.guests, color: fg, size: 18),
+                ],
                 if (category != null) ...[
                   const SizedBox(height: 14),
                   Row(
@@ -469,11 +473,61 @@ class _EventCard extends ConsumerWidget {
                     height: 1.25,
                   ),
                 ),
+                if (event.guests.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  _Guests(
+                    guests: event.guests,
+                    color: onCat ?? scheme.onSurfaceVariant,
+                    size: 15,
+                  ),
+                ],
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Kikkel közös az esemény: azok neve, akik ELFOGADTÁK a meghívást (a saját
+/// fiókunk nélkül). Aki még nem válaszolt, itt nem jelenik meg — a kártya azt
+/// mondja meg, ki lesz ott, nem azt, kit hívtak meg. A teljes névsor a
+/// válaszokkal az esemény részletei lapon van.
+class _Guests extends StatelessWidget {
+  const _Guests({
+    required this.guests,
+    required this.color,
+    required this.size,
+  });
+
+  final List<String> guests;
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(
+          Icons.group_outlined,
+          size: size,
+          color: color.withValues(alpha: 0.8),
+        ),
+        const SizedBox(width: 7),
+        // Sok résztvevőnél inkább levágjuk a névsort, mint hogy a kártya nőjön.
+        Expanded(
+          child: Text(
+            guests.join(', '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: color.withValues(alpha: 0.9),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

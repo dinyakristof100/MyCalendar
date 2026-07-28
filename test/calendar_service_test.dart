@@ -262,6 +262,19 @@ void main() {
     expect(series.rrule, 'FREQ=WEEKLY;BYDAY=MO');
   });
 
+  test('a résztvevők névsora átjön, üresen és hiányzó kulcsnál sem törik', () {
+    final begin = DateTime(2026, 7, 23, 14).millisecondsSinceEpoch;
+    // Így küldi a natív oldal (lásd CalendarQuery.queryAcceptedGuests): csak
+    // azok, akik elfogadták, a saját fiókunk nélkül.
+    expect(
+      parseEvent({..._raw(begin: begin), 'guests': ['Anna', 'bela@pelda.hu']}).guests,
+      ['Anna', 'bela@pelda.hu'],
+    );
+    // A régi/üres válasz nem hibázhat: a kártya ilyenkor nem ír ki semmit.
+    expect(parseEvent(_raw(begin: begin)).guests, isEmpty);
+    expect(parseEvent({..._raw(begin: begin), 'guests': ['  ']}).guests, isEmpty);
+  });
+
   test('egész napos eseménynek nincs mutatható vége', () {
     final begin = DateTime.utc(2026, 7, 23).millisecondsSinceEpoch;
     final event = parseEvent(
