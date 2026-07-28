@@ -212,6 +212,7 @@ class _PlanView extends ConsumerWidget {
         total: week.targetCount(plan),
         day: now,
         streak: ref.read(streakProvider).live(now),
+        spin: motivationSpin.value,
       ),
       WorkoutOutcome.skipped =>
         'Kihagyva — ezt a napot nem hozzuk át a jövő hétre.',
@@ -376,9 +377,13 @@ class _PlanView extends ConsumerWidget {
   }
 }
 
-/// A „lite" gondolkodtató, illetve a hét zárása. Amíg van nyitott nap, naponta
-/// forgó párosban mutatja, mit nyersz és mit veszítesz. Ha minden edzés megvan,
-/// zöld gratuláció; ha a hét lezárt, de volt kihagyott nap, halkabb nyugtázás.
+/// A „lite" gondolkodtató, illetve a hét zárása. Amíg van nyitott nap, párban
+/// mutatja, mit nyersz és mit veszítesz. Ha minden edzés megvan, zöld
+/// gratuláció; ha a hét lezárt, de volt kihagyott nap, halkabb nyugtázás.
+///
+/// Mindhárom szöveg a [motivationSpin]-re van kötve: az edzésnapló minden
+/// megnyitása másikat hoz elő. A fül a héjban életben marad, ezért a szülő
+/// képernyő nem épül újra magától — a feliratkozás itt, a kártyában van.
 class _MotivationCard extends StatelessWidget {
   const _MotivationCard({
     required this.fullyTrained,
@@ -393,16 +398,20 @@ class _MotivationCard extends StatelessWidget {
   final int streak;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+    valueListenable: motivationSpin,
+    builder: (context, spin, _) => _build(context, spin),
+  );
+
+  Widget _build(BuildContext context, int spin) {
     final theme = Theme.of(context);
+    final today = DateTime.now();
 
     if (fullyTrained) {
       return _Banner(
         color: _done,
         icon: Icons.emoji_events_outlined,
-        text: streak >= 2
-            ? 'A heti terv kész — 🔥 $streak hét zsinórban! Jöhet a pihenés.'
-            : 'A heti terv kész — minden edzés megvan. Jöhet a pihenés!',
+        text: weekCompleteFor(today, streak: streak, spin: spin),
       );
     }
 
@@ -410,13 +419,11 @@ class _MotivationCard extends StatelessWidget {
       return _Banner(
         color: theme.colorScheme.onSurfaceVariant,
         icon: Icons.check_circle_outline,
-        text:
-            'A hét lezárva — $skipped nap kihagyva, a többi megvolt. '
-            'A kihagyott napot nem hozzuk át.',
+        text: weekClosedFor(today, skipped: skipped, spin: spin),
       );
     }
 
-    final reflection = reflectionFor(DateTime.now());
+    final reflection = reflectionFor(today, spin: spin);
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
       decoration: cardSurface(theme),

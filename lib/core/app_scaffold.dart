@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/help/guide.dart';
+import '../features/workouts/motivation.dart';
 
 /// Minden bejelentkezés utáni oldal közös váza: fejléc az oldal nevével. Az
 /// oldalak közti váltást az [AppShell] alsó navigációs sávja adja.
@@ -43,6 +44,13 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  /// Az edzésnapló füle a router ágai között — a rá lépés forgat egyet a
+  /// motivációs szövegeken.
+  static const _workoutsTab = 2;
+
+  /// Melyik fülön álltunk az előző felépüléskor: ebből látszik a fülváltás.
+  int _tab = 0;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +64,18 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final shell = widget.shell;
+    // Fülváltás: a héj minden váltásnál újraépül, a fülek maguk viszont
+    // életben maradnak — a képernyők ezért nem veszik észre, hogy megnyitották
+    // őket. Az edzésnaplónak ez a jelzés kell az új motivációs szöveghez.
+    // Képkocka után léptetünk: építés közben nem piszkálunk más widgetet.
+    if (shell.currentIndex != _tab) {
+      _tab = shell.currentIndex;
+      if (_tab == _workoutsTab) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => motivationSpin.value++,
+        );
+      }
+    }
     return PopScope(
       // A rendszer vissza gombja nem lép ki azonnal az appból: a többi fülről
       // előbb a főképernyőre visz, és csak onnan zárja az appot. A fülön belüli

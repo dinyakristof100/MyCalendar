@@ -309,11 +309,23 @@ void main() {
       findsOneWidget,
     );
 
-    // Amíg a hét nincs meg, a gondolkodtató kártya látszik a napi párossal.
-    final reflection = reflectionFor(DateTime.now());
+    // Amíg a hét nincs meg, a gondolkodtató kártya látszik az aktuális
+    // párossal — a fülre lépés forgatott egyet a szövegeken.
+    final reflection = reflectionFor(DateTime.now(), spin: motivationSpin.value);
     expect(find.text('MIÉRT ÉRI MEG MA?'), findsOneWidget);
     expect(find.text(reflection.gain), findsOneWidget);
     expect(find.text(reflection.cost), findsOneWidget);
+
+    // Elnavigálva és visszalépve MÁS szöveg jár: a fül a héjban életben marad,
+    // a kártya mégis frissül.
+    await _goTab(tester, 'Események');
+    await _goTab(tester, 'Edzésnapló');
+    expect(find.text(reflection.gain), findsNothing);
+    expect(find.text(reflection.cost), findsNothing);
+    expect(
+      find.text(reflectionFor(DateTime.now(), spin: motivationSpin.value).gain),
+      findsOneWidget,
+    );
 
     // Koppintásra nem történik semmi — csak hosszú nyomásra kérdez.
     await tester.tap(find.text('mell, tricepsz'));
@@ -339,7 +351,14 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.text(praiseFor(done: 1, total: 2, day: DateTime.now())),
+      find.text(
+        praiseFor(
+          done: 1,
+          total: 2,
+          day: DateTime.now(),
+          spin: motivationSpin.value,
+        ),
+      ),
       findsOneWidget,
     );
     // A SnackBar magától eltűnik — a lejáratát is lepörgetjük, hogy ne

@@ -28,6 +28,47 @@ void main() {
     expect(doneGains, contains(reflectionFor(today).gain));
   });
 
+  test('a forgató minden lépése más szöveget hoz elő', () {
+    final day = DateTime(2026, 7, 23);
+
+    // Az edzésnapló minden megnyitása léptet egyet: a szomszédos forgatók sosem
+    // adhatják ugyanazt a szöveget — ez a kérés lényege.
+    for (var spin = 0; spin < 5; spin++) {
+      expect(
+        reflectionFor(day, spin: spin).gain,
+        isNot(reflectionFor(day, spin: spin + 1).gain),
+      );
+      expect(
+        reflectionFor(day, spin: spin).cost,
+        isNot(reflectionFor(day, spin: spin + 1).cost),
+      );
+      expect(
+        praiseFor(done: 1, total: 3, day: day, spin: spin),
+        isNot(praiseFor(done: 1, total: 3, day: day, spin: spin + 1)),
+      );
+      expect(
+        weekCompleteFor(day, spin: spin),
+        isNot(weekCompleteFor(day, spin: spin + 1)),
+      );
+      expect(
+        weekClosedFor(day, skipped: 1, spin: spin),
+        isNot(weekClosedFor(day, skipped: 1, spin: spin + 1)),
+      );
+    }
+
+    // Forgató nélkül minden a régi marad — ezt ütemezzük előre az értesítésbe.
+    expect(reflectionFor(day), reflectionFor(day, spin: 0));
+  });
+
+  test('a lezárt hét szövegébe a kihagyott napok száma kerül', () {
+    final day = DateTime(2026, 7, 23);
+    expect(weekClosedFor(day, skipped: 2), contains('2'));
+    expect(weekClosedFor(day, skipped: 2), isNot(contains('%d')));
+    for (final message in weekClosedMessages) {
+      expect(message, contains('%d'));
+    }
+  });
+
   test('az esti egysoros felváltva mutat nyereséget és veszteséget', () {
     final today = DateTime(2026, 7, 23);
     final tomorrow = DateTime(2026, 7, 24);
