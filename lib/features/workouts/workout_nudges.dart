@@ -38,8 +38,13 @@ const _fromMinutes = 19 * 60 + 30;
 const _windowMinutes = 60;
 
 /// Hány napra előre ütemezünk. Az app minden indulásnál és minden pipálásnál
-/// újraütemez, tehát ez csak arra kell, hogy egy hétig ki se kelljen nyitni.
-const _horizonDays = 7;
+/// újraütemez, tehát ez csak arra kell, hogy ki se kelljen nyitni.
+///
+/// Két hét, nem egy: a letudott hét hátralévő napjait kihagyjuk, és egy hetes
+/// ablakba a következő hétből alig fér valami — hétfőn lezárt hétnél semmi. Az
+/// app pedig pont azért nem nyílna meg újra, mert nem szól: ilyenkor a kérdés
+/// végleg elnémul.
+const _horizonDays = 14;
 
 const _details = NotificationDetails(
   android: AndroidNotificationDetails(
@@ -80,8 +85,13 @@ Future<void> syncWorkoutNudges({
 
   // Előbb mindig tiszta lap: a terv és a teljesítés is változhatott. Kikapcsolt
   // kapcsolónál ennyi a dolgunk — a már kiütemezett kérdések is elmennek.
-  for (var day = 0; day < _horizonDays; day++) {
-    await notifications.cancel(id: workoutIdBase + day);
+  //
+  // Csak a MÉG BE NEM SÜLT kérdéseket szedjük le (a `pending` lista pont ez): a
+  // `cancel` a fiókban álló, kiírt értesítést is eltünteti ugyanazzal az
+  // azonosítóval. Vak 0..horizon körrel a ma esti kérdés a következő
+  // appnyitáskor némán eltűnt, mielőtt elolvasták volna.
+  for (final pending in await notifications.pendingNotificationRequests()) {
+    if (pending.id >= workoutIdBase) await notifications.cancel(id: pending.id);
   }
   if (!enabled || plan == null) return;
 
