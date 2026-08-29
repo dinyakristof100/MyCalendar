@@ -127,6 +127,33 @@ void main() {
     expect(scheduled().length, greaterThanOrEqualTo(13));
   });
 
+  test('a ma esti kérdés nem sül el kétszer', () async {
+    await syncWorkoutNudges(plan: _plan, weekResolved: false, now: _monday);
+    final tonight = scheduled().first; // a mai este időpontja
+    calls.clear();
+
+    // Regresszió: a kérdés elsült, rákoppintottak, az app elindult — és friss
+    // véletlennel az ablak egy KÉSŐBBI percére másodszor is beütemezte magát.
+    await syncWorkoutNudges(
+      plan: _plan,
+      weekResolved: false,
+      now: tonight.add(const Duration(minutes: 5)),
+    );
+    expect(scheduled().where((at) => at.day == tonight.day), isEmpty);
+  });
+
+  test('ma már volt pipa vagy kihagyás: a mai estére nem kérdez', () async {
+    await syncWorkoutNudges(
+      plan: _plan,
+      weekResolved: false,
+      now: _monday,
+      markedOn: DateTime(_monday.year, _monday.month, _monday.day),
+    );
+    final at = scheduled();
+    expect(at, hasLength(13)); // a 14-ből a mai este marad ki
+    expect(at.where((when) => when.day == _monday.day), isEmpty);
+  });
+
   test('kikapcsolt kapcsoló: csak törlés marad', () async {
     await syncWorkoutNudges(
       plan: _plan,

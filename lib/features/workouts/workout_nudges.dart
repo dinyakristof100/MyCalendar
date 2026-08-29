@@ -15,6 +15,7 @@ import 'workout_progress.dart';
 /// (a `main` megteszi), utána minden változásnál magától újraütemez.
 final workoutNudgeSyncProvider = Provider<void>((ref) {
   final plan = ref.watch(workoutPlansProvider).active;
+  final week = ref.watch(currentWeekProvider);
   syncWorkoutNudges(
     plan: plan,
     // A kapcsolót is figyeljük: kikapcsoláskor ez a sync viszi le a már
@@ -22,8 +23,9 @@ final workoutNudgeSyncProvider = Provider<void>((ref) {
     enabled: ref.watch(notificationsProvider).workout,
     // A hét „lezárva", ha minden nap leedzve VAGY szándékosan kihagyva — a
     // skippelt napra nincs mit kérdezni, az áthozottra viszont van.
-    weekResolved:
-        plan != null && ref.watch(currentWeekProvider).resolvedAll(plan),
+    weekResolved: plan != null && week.resolvedAll(plan),
+    // Ha ma már volt pipa vagy kihagyás, a mai estére nincs mit kérdezni.
+    markedOn: week.markedOn,
     // A mai élő sorozat: van-e mit „ne szakíts meg". A sorozat változása is
     // újraütemez, így az értesítés szövege követi.
     streak: ref.watch(streakProvider).live(DateTime.now()),
@@ -36,6 +38,23 @@ final workoutNudgeSyncProvider = Provider<void>((ref) {
 /// érkező értesítés.
 const _fromMinutes = 19 * 60 + 30;
 const _windowMinutes = 60;
+
+/// Egy adott nap esti időpontja. A véletlen magja a DÁTUM, nem a hívás
+/// pillanata: ugyanarra a napra minden újraütemezés ugyanazt az időpontot
+/// számolja ki.
+///
+/// Friss `Random()`-mal a ma esti kérdés — miután elsült, és a koppintására
+/// elindult az app — új, KÉSŐBBI percet kapott az ablakon belül, és másodszor
+/// is szólt. Így viszont a lenti „ma este már elmúlt" ág elkapja.
+DateTime _nudgeTimeOn(DateTime date) => date.add(
+  Duration(
+    minutes:
+        _fromMinutes +
+        Random(
+          date.year * 10000 + date.month * 100 + date.day,
+        ).nextInt(_windowMinutes + 1),
+  ),
+);
 
 /// Hány napra előre ütemezünk. Az app minden indulásnál és minden pipálásnál
 /// újraütemez, tehát ez csak arra kell, hogy ki se kelljen nyitni.
@@ -74,11 +93,15 @@ const _details = NotificationDetails(
 /// Csak akkor kérdez, ha [enabled] (a beállításokbeli kapcsoló), van aktív terv,
 /// és a hét még nincs lezárva: a letudott (leedzett vagy kihagyott) hét
 /// hátralévő napjait kihagyjuk, a következő hetet viszont már ütemezzük.
+///
+/// [markedOn] a legutóbbi pipa/kihagyás napja: ha az a mai, a ma estét kihagyjuk
+/// — amire ma már válaszoltak, azt nem kérdezzük meg újra.
 Future<void> syncWorkoutNudges({
   required WorkoutPlan? plan,
   required bool weekResolved,
   bool enabled = true,
   int streak = 0,
+  DateTime? markedOn,
   DateTime? now,
 }) async {
   final from = now ?? DateTime.now();
@@ -97,16 +120,15 @@ Future<void> syncWorkoutNudges({
 
   final weekDone = weekResolved;
   final nextWeek = weekStartOf(from).add(const Duration(days: 7));
-  final random = Random();
 
   for (var day = 0; day < _horizonDays; day++) {
     final date = DateTime(from.year, from.month, from.day + day);
     // A már letudott hétre nincs mit kérdezni, a következőre még lehet.
     if (weekDone && date.isBefore(nextWeek)) continue;
+    // Ma már volt interakció (pipa vagy kihagyás): a mai este kimarad.
+    if (day == 0 && markedOn == date) continue;
 
-    final at = date.add(
-      Duration(minutes: _fromMinutes + random.nextInt(_windowMinutes + 1)),
-    );
+    final at = _nudgeTimeOn(date);
     // Ma este már elmúlt az idősáv.
     if (!at.isAfter(from)) continue;
 

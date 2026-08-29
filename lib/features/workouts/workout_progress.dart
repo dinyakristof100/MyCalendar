@@ -10,6 +10,16 @@ import 'workout_plans.dart';
 const _key = 'workoutProgress';
 const _carryKey = 'carryOverWorkouts';
 
+/// A mai nap ejfele — a [WeekProgress.markedOn] merteke.
+///
+/// ponytail: a visszavonas (null outcome) is interakcionak szamit, nem
+/// kulonboztetjuk meg. Aki este visszavonja a pipat, az az edzesnaplot nezi
+/// eppen; a kerdest onnan is fel tudja tenni maganak.
+DateTime _today() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+}
+
 /// Egy edzésnap kimenetele a heten belul.
 ///
 /// A [skipped] a felhasznalo szandekos dontese: ezt a napot nem edzi le, de nem
@@ -60,6 +70,7 @@ class WeekProgress {
     this.done = const {},
     this.skipped = const {},
     this.carried = const [],
+    this.markedOn,
   });
 
   final String? planId;
@@ -67,6 +78,11 @@ class WeekProgress {
   final Set<int> done;
   final Set<int> skipped;
   final List<CarriedDay> carried;
+
+  /// A legutobbi pipa/kihagyas napja (ejfelre vagva). A napok slot-indexek, nem
+  /// datumok — ez az egyetlen nyom arrol, hogy MA volt-e mar interakcio. Az esti
+  /// kerdes ezt nezi: ha ma mar pipaltak vagy kihagytak, nincs mit kerdezni.
+  final DateTime? markedOn;
 
   /// A terv sajat napjainak szama ezen a heten (A/B tervnel a soron kovetkezoe).
   int _baseDays(WorkoutPlan plan) => plan.daysOfWeekAt(weekStart!).length;
@@ -98,11 +114,13 @@ class WeekProgress {
     'done': done.toList(),
     'skipped': skipped.toList(),
     'carried': [for (final c in carried) c.toJson()],
+    'markedOn': markedOn?.toIso8601String(),
   };
 
   static WeekProgress fromJson(Map<String, Object?> json) => WeekProgress(
     planId: json['planId'] as String?,
     weekStart: DateTime.tryParse(json['weekStart'] as String? ?? ''),
+    markedOn: DateTime.tryParse(json['markedOn'] as String? ?? ''),
     done: {for (final day in (json['done'] as List? ?? const [])) day as int},
     skipped: {
       for (final day in (json['skipped'] as List? ?? const [])) day as int,
@@ -148,6 +166,7 @@ WeekProgress settleWeek(
           if (slot < days) slot,
       },
       carried: stored.carried,
+      markedOn: stored.markedOn,
     );
   }
 
@@ -239,6 +258,7 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
       done: done,
       skipped: skipped,
       carried: cur.carried,
+      markedOn: _today(),
     );
     await _persist(week);
     await _syncStreak(plan, week);
@@ -261,6 +281,7 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
         for (var i = 0; i < cur.carried.length; i++)
           i == index ? cur.carried[i].withOutcome(outcome) : cur.carried[i],
       ],
+      markedOn: _today(),
     );
     await _persist(week);
     await _syncStreak(plan, week);
