@@ -279,6 +279,10 @@ void main() {
       'Közgazdaságtan előadás',
     );
     await tester.pumpAndSettle();
+    // A lap nem ér fel a kijelző tetejéig, tehát a mentés gombhoz görgetni
+    // kell — ahogy a készüléken is.
+    await tester.ensureVisible(find.text('Mentés'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Mentés'));
     await tester.pumpAndSettle();
 
@@ -292,6 +296,73 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Közgazdaságtan előadás'), findsOneWidget);
     expect(find.text('8:00–9:30'), findsOneWidget);
+  });
+
+  testWidgets('beosztás: egy űrlap több napra, a törlés csak egy napot visz', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1080, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => prefs.remove('schedule'));
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Beosztás');
+    await tester.tap(find.text('Első tétel felvétele'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Mi ez?'),
+      'Reggeli műszak',
+    );
+    await tester.pumpAndSettle();
+
+    // A mai nap eleve ki van pipálva; beveszünk mellé kettőt. (Ha a mai nap
+    // épp az egyik, akkor a másikat kapcsoljuk ki-be, ezért a halmazt a végén
+    // a mentett tételekből ellenőrizzük.)
+    for (final label in ['H', 'Sze', 'P']) {
+      final chip = find.widgetWithText(FilterChip, label);
+      final selected = tester.widget<FilterChip>(chip).selected;
+      if (!selected) {
+        await tester.tap(chip);
+        await tester.pumpAndSettle();
+      }
+    }
+    await tester.ensureVisible(find.text('Mentés'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mentés'));
+    await tester.pumpAndSettle();
+
+    // Minden kipipált napra külön tétel készült, saját azonosítóval.
+    List<Map<String, Object?>> saved() => [
+      for (final e
+          in (jsonDecode(prefs.getString('schedule')!)
+              as Map)['entries'] as List)
+        (e as Map).cast<String, Object?>(),
+    ];
+    final days = {for (final e in saved()) e['weekday'] as int};
+    expect(days.containsAll({1, 3, 5}), isTrue);
+    expect(saved().map((e) => e['id']).toSet().length, saved().length);
+
+    // Az egyik napot törölve CSAK az tűnik el, a többi marad. A heti rács
+    // hétfővel kezdi az oszlopokat, tehát az első blokk a hétfői tétel.
+    final before = saved().length;
+    await tester.tap(find.text('Hét'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Reggeli műszak').first);
+    await tester.pumpAndSettle();
+    final deleteButton = find.widgetWithIcon(
+      OutlinedButton,
+      Icons.delete_outline,
+    );
+    await tester.ensureVisible(deleteButton);
+    await tester.pumpAndSettle();
+    await tester.tap(deleteButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Törlés'));
+    await tester.pumpAndSettle();
+
+    expect(saved().length, before - 1);
+    expect({for (final e in saved()) e['weekday'] as int}, isNot(contains(1)));
   });
 
   testWidgets('beosztás: oldalra húzva lapoz napot és hetet', (tester) async {

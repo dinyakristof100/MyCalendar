@@ -27,6 +27,7 @@ class ScheduleScreen extends ConsumerStatefulWidget {
 class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   late DateTime _day = _today();
   bool _weekView = false;
+  int _slideDir = 1; // az utolsó lapozás iránya, a csúszó animációhoz
   Timer? _clock;
 
   static DateTime _today() {
@@ -49,9 +50,18 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
   }
 
   void _shift(int steps) => setState(() {
+    _slideDir = steps.sign;
     final days = (_weekView ? 7 : 1) * steps;
     _day = DateTime(_day.year, _day.month, _day.day + days);
   });
+
+  void _goToday() {
+    final today = _today();
+    setState(() {
+      _slideDir = _day.isAfter(today) ? -1 : 1;
+      _day = today;
+    });
+  }
 
   /// Vízszintes húzás: jobbról balra előre, balról jobbra vissza — mint a
   /// naptárban a hónapok között. Napi nézetben napot, hetiben hetet lapoz.
@@ -148,7 +158,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
           IconButton(
             icon: const Icon(Icons.today_outlined),
             tooltip: 'Ugrás a mai napra',
-            onPressed: () => setState(() => _day = _today()),
+            onPressed: _goToday,
           ),
         IconButton(
           icon: const Icon(Icons.palette_outlined),
@@ -219,32 +229,42 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                     isWeek: _weekView,
                   ),
                   Expanded(
-                    child: _weekView
-                        ? _WeekGrid(
-                            state: state,
-                            week: week,
-                            weekStart: weekStart,
-                            now: now,
-                            onEntryTap: (entry) =>
-                                showEntrySheet(context, editing: entry),
-                            onEmptyTap: (weekday, start) => showEntrySheet(
-                              context,
-                              weekday: weekday,
-                              start: start,
+                    child: _Paged(
+                      // Lapozáskor a látott egység változik: napi nézetben a
+                      // nap, hetiben a hét — csak ilyenkor animálunk.
+                      pageKey: ValueKey(
+                        '$_weekView|${(_weekView ? weekStart : _day).toIso8601String()}',
+                      ),
+                      direction: _slideDir,
+                      child: _weekView
+                          ? _WeekGrid(
+                              state: state,
+                              week: week,
+                              weekStart: weekStart,
+                              now: now,
+                              onEntryTap: (entry) =>
+                                  showEntrySheet(context, editing: entry),
+                              onEmptyTap: (weekday, start) => showEntrySheet(
+                                context,
+                                weekday: weekday,
+                                start: start,
+                              ),
+                              onDayTap: (weekday) => setState(() {
+                                _day = weekStart.add(
+                                  Duration(days: weekday - 1),
+                                );
+                                _weekView = false;
+                              }),
+                            )
+                          : _DayView(
+                              state: state,
+                              day: _day,
+                              week: week,
+                              now: now,
+                              onEntryTap: (entry) =>
+                                  showEntrySheet(context, editing: entry),
                             ),
-                            onDayTap: (weekday) => setState(() {
-                              _day = weekStart.add(Duration(days: weekday - 1));
-                              _weekView = false;
-                            }),
-                          )
-                        : _DayView(
-                            state: state,
-                            day: _day,
-                            week: week,
-                            now: now,
-                            onEntryTap: (entry) =>
-                                showEntrySheet(context, editing: entry),
-                          ),
+                    ),
                   ),
                   if (_weekView && state.groups.isNotEmpty)
                     _Legend(groups: state.groups),
@@ -322,6 +342,49 @@ class _NavBar extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Lapozás-animáció: az új nap/hét a lapozás irányából úszik be, a régi
+/// ellenkező irányba ki. Rövid és halk — csak annyit mond, hogy „lapoztál",
+/// nem várakoztat. Ugyanaz a mozdulat, mint a naptár hónapváltásánál.
+class _Paged extends StatelessWidget {
+  const _Paged({
+    required this.pageKey,
+    required this.direction,
+    required this.child,
+  });
+
+  final Key pageKey;
+  final int direction;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSwitcher(
+    duration: const Duration(milliseconds: 220),
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    // A kimenő és a bejövő lap egymás mellett áll, nem egymás alatt — a
+    // rács és a lista is a teljes helyet kéri.
+    layoutBuilder: (current, previous) => Stack(
+      alignment: Alignment.topLeft,
+      children: [...previous, ?current],
+    ),
+    transitionBuilder: (child, animation) {
+      final incoming = child.key == pageKey;
+      final from = (incoming ? direction : -direction) * 0.14;
+      return FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween(
+            begin: Offset(from, 0),
+            end: Offset.zero,
+          ).animate(animation),
+          child: child,
+        ),
+      );
+    },
+    child: KeyedSubtree(key: pageKey, child: child),
+  );
 }
 
 /// „A HÉT" / „B HÉT" jelvény. A most futó hét kitöltve és „· MOST" felirattal
@@ -438,6 +501,10 @@ class _WeekGrid extends StatelessWidget {
               ),
               Expanded(
                 child: SingleChildScrollView(
+                  // A lapozás új rácsot épít (az animációhoz kulcsolt), ez
+                  // pedig megőrzi a függőleges pozíciót — különben minden
+                  // héten visszaugrana a nap elejére.
+                  key: const PageStorageKey('scheduleGrid'),
                   child: SizedBox(
                     // Alul hely a lebegő gombnak: enélkül az utolsó tétel
                     // alsó sarka a gomb alá kerül.
@@ -916,38 +983,31 @@ class _DayCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
-    final color = group?.color ?? scheme.primary;
+    final color = group?.color ?? scheme.surfaceContainerHighest;
     final now = nowMinutes;
     final running = now != null && now >= entry.start && now < entry.end;
-    final past = now != null && now >= entry.end;
-    // A letudott tétel elveszti a színét, nem az olvashatóságát: szürke lapon
-    // marad, így a nap hátralévő része az, ami színnel kiabál. (Áttetszőre
-    // halványítva a beállított háttérkép ütne át rajta.)
-    final accent = past ? scheme.onSurfaceVariant : color;
-    final plain = past || group == null;
+    // A kártya ugyanaz a tömör csoportszín, mint a heti rács blokkja — egy
+    // tétel ugyanúgy nézzen ki mindkét nézetben, akkor is, ha ma már elmúlt.
+    // A szöveg fehér vagy fekete, amelyik olvasható rajta.
+    //
+    // ponytail: nincs külön „letudott" állapot. Áttetszőre halványítva a
+    // beállított háttérkép ütne át a kártyán, szürkére váltva pedig pont a
+    // heti nézettől térne el. Ami most van, azt a MOST jelvény mutatja.
+    final plain = group == null;
+    final fill = plain ? scheme.surfaceContainerHighest : color;
+    final ink = plain ? scheme.onSurface : readableOn(color);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: AppCard(
         decoration: BoxDecoration(
-          // Tömör felület: a háttérkép alatt egy alfás kártyán átüt a kép, és
-          // a szöveg olvashatatlanná válik — ezért a színt a lapra keverjük.
-          color: plain
-              ? scheme.surfaceContainerLow
-              : Color.alphaBlend(
-                  color.withValues(alpha: dark ? 0.22 : 0.13),
-                  scheme.surfaceContainerLow,
-                ),
+          color: fill,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: running
-                ? accent
-                : (plain
-                      ? scheme.outlineVariant
-                      : color.withValues(alpha: 0.35)),
-            width: running ? 2 : 1,
-          ),
+          // Színes kártyán a keret elveszne — a most futó tételt a piros
+          // kontúr és a MOST jelvény emeli ki, a szürkét egy halk vonal.
+          border: running
+              ? Border.all(color: _nowColor, width: 2)
+              : (plain ? Border.all(color: scheme.outlineVariant) : null),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
@@ -966,15 +1026,13 @@ class _DayCard extends StatelessWidget {
                         hhmm(entry.start),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: group == null && !past
-                              ? scheme.onSurface
-                              : accent,
+                          color: ink,
                         ),
                       ),
                       FitText(
                         hhmm(entry.end),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                          color: ink.withValues(alpha: 0.75),
                         ),
                       ),
                     ],
@@ -992,7 +1050,7 @@ class _DayCard extends StatelessWidget {
                               entry.title,
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
-                                color: past ? scheme.onSurfaceVariant : null,
+                                color: ink,
                               ),
                             ),
                           ),
@@ -1004,7 +1062,7 @@ class _DayCard extends StatelessWidget {
                         Text(
                           entry.note,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                            color: ink.withValues(alpha: 0.85),
                           ),
                         ),
                       ],
@@ -1015,7 +1073,7 @@ class _DayCard extends StatelessWidget {
                           if (group != null) group!.name,
                         ].join(' · '),
                         style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                          color: ink.withValues(alpha: 0.75),
                         ),
                       ),
                     ],

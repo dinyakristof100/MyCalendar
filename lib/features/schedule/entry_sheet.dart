@@ -21,6 +21,8 @@ Future<void> showEntrySheet(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
+    useSafeArea: true,
+    constraints: _sheetHeight(context),
     builder: (_) => _EntrySheet(
       editing: editing,
       weekday: editing?.weekday ?? weekday,
@@ -35,9 +37,17 @@ Future<void> showScheduleGroups(BuildContext context) {
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
+    useSafeArea: true,
+    constraints: _sheetHeight(context),
     builder: (_) => const _GroupManager(),
   );
 }
+
+/// A lap sosem ér fel a kijelző tetejéig: marad fölötte egy csík, amiből
+/// látszik, hogy egy lapot húztál fel, nem egy új képernyőt nyitottál. Ami így
+/// nem fér ki, azt a lap belül görgeti.
+BoxConstraints _sheetHeight(BuildContext context) =>
+    BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9);
 
 class _EntrySheet extends ConsumerStatefulWidget {
   const _EntrySheet({
@@ -57,7 +67,10 @@ class _EntrySheet extends ConsumerStatefulWidget {
 class _EntrySheetState extends ConsumerState<_EntrySheet> {
   final _title = TextEditingController();
   final _note = TextEditingController();
-  late int _weekday = widget.weekday;
+
+  /// A kipipált napok. Egy űrlapból több nap is lehet — mindegyikre külön
+  /// tétel készül, hogy az egyiket törölve a többi megmaradjon.
+  late final Set<int> _weekdays = {widget.weekday};
   late int _start = widget.start;
   late int _end = widget.editing?.end ?? (widget.start + 90);
 
@@ -83,7 +96,8 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
     super.dispose();
   }
 
-  bool get _valid => _title.text.trim().isNotEmpty && _end > _start;
+  bool get _valid =>
+      _title.text.trim().isNotEmpty && _end > _start && _weekdays.isNotEmpty;
 
   Future<void> _pickTime({required bool end}) async {
     final current = end ? _end : _start;
@@ -115,20 +129,28 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
     if (!_valid || _saving) return;
     setState(() => _saving = true);
     final editing = widget.editing;
-    await ref
-        .read(scheduleProvider.notifier)
-        .saveEntry(
-          ScheduleEntry(
-            id: editing?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-            weekday: _weekday,
-            start: _start,
-            end: _end,
-            title: _title.text.trim(),
-            week: _week < 0 ? null : _week,
-            note: _note.text.trim(),
-            groupId: _groupId,
-          ),
-        );
+    final days = _weekdays.toList()..sort();
+    // Szerkesztésnél a szerkesztett tétel marad a saját napján (ha még ki van
+    // pipálva), a többi kipipált nap ÚJ tételként jön létre. Így minden nap
+    // önálló: az egyiket törölve a többi a helyén marad.
+    final keep = editing != null && days.contains(editing.weekday)
+        ? editing.weekday
+        : days.first;
+    final base = DateTime.now().microsecondsSinceEpoch;
+
+    await ref.read(scheduleProvider.notifier).saveEntries([
+      for (final day in days)
+        ScheduleEntry(
+          id: editing != null && day == keep ? editing.id : '${base + day}',
+          weekday: day,
+          start: _start,
+          end: _end,
+          title: _title.text.trim(),
+          week: _week < 0 ? null : _week,
+          note: _note.text.trim(),
+          groupId: _groupId,
+        ),
+    ]);
     if (mounted) Navigator.pop(context);
   }
 
@@ -138,7 +160,12 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Tétel törlése'),
-        content: Text('„${entry.title}" lekerül a beosztásról.'),
+        // A törlés CSAK erről a napról szól: ugyanaz a cím más napokon önálló
+        // tétel, az ott marad.
+        content: Text(
+          '„${entry.title}" törlődik erről a napról '
+          '(${scheduleWeekdayNames[entry.weekday - 1]}). A többi nap marad.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -195,18 +222,34 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const _Label('Melyik nap?'),
+              const _Label('Mely napokon?'),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
                   for (var day = 1; day <= 7; day++)
-                    ChoiceChip(
+                    FilterChip(
                       label: Text(scheduleWeekdays[day - 1]),
-                      selected: _weekday == day,
-                      onSelected: (_) => setState(() => _weekday = day),
+                      selected: _weekdays.contains(day),
+                      onSelected: (on) => setState(
+                        () => on ? _weekdays.add(day) : _weekdays.remove(day),
+                      ),
                     ),
                 ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  _weekdays.isEmpty
+                      ? 'Válassz legalább egy napot.'
+                      : 'Több napot is bejelölhetsz — mindegyikre külön tétel '
+                            'kerül, és külön is törölhetők.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: _weekdays.isEmpty
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ),
               const _Label('Mettől meddig?'),
               Row(

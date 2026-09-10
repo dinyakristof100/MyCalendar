@@ -265,16 +265,21 @@ class ScheduleController extends Notifier<ScheduleState> {
   }
 
   /// Új tétel felvitele vagy meglévő felülírása — az azonosító dönti el.
-  Future<void> saveEntry(ScheduleEntry entry) async {
-    final exists = state.entries.any((e) => e.id == entry.id);
-    state = _with(
-      entries: exists
+  Future<void> saveEntry(ScheduleEntry entry) => saveEntries([entry]);
+
+  /// Több tétel egy menetben (egy űrlap több napra). Minden nap külön tétel
+  /// saját azonosítóval: így egy nap törlése a többit nem viszi el.
+  Future<void> saveEntries(Iterable<ScheduleEntry> entries) async {
+    var next = state.entries;
+    for (final entry in entries) {
+      next = next.any((e) => e.id == entry.id)
           ? [
-              for (final e in state.entries)
+              for (final e in next)
                 if (e.id == entry.id) entry else e,
             ]
-          : [...state.entries, entry],
-    );
+          : [...next, entry];
+    }
+    state = _with(entries: next);
     await _save();
   }
 
