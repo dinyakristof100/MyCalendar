@@ -9,6 +9,7 @@ import 'package:my_calendar/app.dart';
 import 'package:my_calendar/core/notifications.dart';
 import 'package:my_calendar/features/auth/auth_controller.dart';
 import 'package:my_calendar/features/calendar/calendar_service.dart';
+import 'package:my_calendar/features/calendar/event_categories.dart';
 import 'package:my_calendar/features/calendar/event_groups.dart';
 import 'package:my_calendar/features/help/guide.dart';
 import 'package:my_calendar/features/settings/settings_screen.dart';
@@ -75,7 +76,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.widgetWithText(AppBar, 'Események'), findsOneWidget);
     expect(find.text('Szabad két hét'), findsOneWidget);
-    for (final label in ['Események', 'Naptár', 'Edzésnapló', 'Beállítások']) {
+    for (final label in [
+      'Események',
+      'Naptár',
+      'Beosztás',
+      'Edzésnapló',
+      'Beállítások',
+    ]) {
       expect(
         find.descendant(
           of: find.byType(NavigationBar),
@@ -215,6 +222,161 @@ void main() {
       expect(reopened.read(notificationsProvider).dayBefore, isTrue);
     },
   );
+
+  testWidgets('kategória egyedi színnel: a csúszkák a palettán kívülre visznek', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1080, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => prefs.remove('eventCategories'));
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Naptár');
+    await tester.tap(find.byTooltip('Kategóriák'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Új kategória'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Név'), 'Egyetem');
+    // Alapból csak a paletta látszik — a csúszkák az „egyedi szín" alatt vannak.
+    expect(find.byType(Slider), findsNothing);
+    await tester.tap(find.byTooltip('Egyedi szín'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Slider), findsNWidgets(3));
+
+    // Az árnyalat csúszkát elhúzva a szín kikerül az alapszínek közül.
+    await tester.drag(find.byType(Slider).first, const Offset(120, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Létrehozás'));
+    await tester.pumpAndSettle();
+
+    final saved = jsonDecode(prefs.getString('eventCategories')!) as List;
+    final color = (saved.single as Map)['color'] as int;
+    expect(
+      [for (final c in categoryColors) c.toARGB32()],
+      isNot(contains(color)),
+      reason: 'az egyedi szín nem lehet a paletta egyik alapszíne',
+    );
+  });
+
+  testWidgets('beosztás: tétel felvitele, napi és heti nézet', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1080, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => prefs.remove('schedule'));
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Beosztás');
+    expect(find.text('Még üres a beosztásod'), findsOneWidget);
+
+    await tester.tap(find.text('Első tétel felvétele'));
+    await tester.pumpAndSettle();
+    // A lap a MAI napra nyílik: a mentett tétel ezért a napi nézetben rögtön
+    // látszik, bármelyik napon fut a teszt.
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Mi ez?'),
+      'Közgazdaságtan előadás',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mentés'));
+    await tester.pumpAndSettle();
+
+    // Napi nézet: a tétel a kezdésével és a hosszával.
+    expect(find.text('Közgazdaságtan előadás'), findsOneWidget);
+    expect(find.text('8:00'), findsOneWidget);
+    expect(find.textContaining('1 tétel · 1 óra 30 perc'), findsOneWidget);
+
+    // Heti nézetben ugyanaz a tétel a rácsban.
+    await tester.tap(find.text('Hét'));
+    await tester.pumpAndSettle();
+    expect(find.text('Közgazdaságtan előadás'), findsOneWidget);
+    expect(find.text('8:00–9:30'), findsOneWidget);
+  });
+
+  testWidgets('beosztás: oldalra húzva lapoz napot és hetet', (tester) async {
+    // VALÓDI telefonszélesség (360 dp), nem a tesztek tág alapértelmezése: a
+    // heti rács csak akkor engedi a lapozó húzást, ha a napok kiférnek — széles
+    // felületen ez mindig igaz lenne, és a teszt elnézné a hibát.
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => prefs.remove('schedule'));
+    // Minden napra egy tétel: a napi nézet a hét bármely napján mutat valamit.
+    await prefs.setString(
+      'schedule',
+      '{"abWeeks":false,"groups":[],"entries":[${[
+        for (var day = 1; day <= 7; day++)
+          '{"id":"$day","weekday":$day,"start":480,"end":570,'
+              '"title":"Reggeli műszak","week":null,"note":"","groupId":null}',
+      ].join(',')}]}',
+    );
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Beosztás');
+
+    // Napi nézet: balra húzva holnap, vissza jobbra megint ma.
+    expect(find.textContaining('Ma · '), findsOneWidget);
+    await tester.fling(find.byType(ListView), const Offset(-400, 0), 1200);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Ma · '), findsNothing);
+    await tester.fling(find.byType(ListView), const Offset(400, 0), 1200);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Ma · '), findsOneWidget);
+
+    // Heti nézet: a húzás egész hetet lapoz — a rácson kezdve is (ott nincs
+    // vízszintes görgetés, ami elnyelné). A mai héten állva nincs „Ugrás a mai
+    // napra" gomb; egy hetet lapozva megjelenik.
+    await tester.tap(find.text('Hét'));
+    await tester.pumpAndSettle();
+    final today = find.byTooltip('Ugrás a mai napra');
+    expect(today, findsNothing);
+    await tester.fling(find.text('8:00'), const Offset(-400, 0), 1200);
+    await tester.pumpAndSettle();
+    expect(today, findsOneWidget);
+  });
+
+  testWidgets('beosztás: A/B hétre váltva mindkét héten megmarad a tétel', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1080, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(() => prefs.remove('schedule'));
+    // Minden napra egy tétel, hogy a napi nézet a hét bármely napján mutasson
+    // valamit.
+    await prefs.setString(
+      'schedule',
+      '{"abWeeks":false,"groups":[],"entries":[${[
+        for (var day = 1; day <= 7; day++)
+          '{"id":"$day","weekday":$day,"start":480,"end":570,'
+              '"title":"Reggeli műszak","week":null,"note":"","groupId":null}',
+      ].join(',')}]}',
+    );
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Beosztás');
+    // Sima heti beosztásnál nincs A/B jelvény.
+    expect(find.textContaining('HÉT · MOST'), findsNothing);
+
+    await tester.tap(find.byTooltip('A beosztás műveletei'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Váltás A és B hetesre'));
+    await tester.pumpAndSettle();
+
+    // A jelvény a most futó hetet mutatja, a tétel pedig megmaradt.
+    expect(find.textContaining('HÉT · MOST'), findsOneWidget);
+    expect(find.text('Reggeli műszak'), findsOneWidget);
+
+    // A következő hét már a másik betűjelű (a jelvény nem a most futó hetet
+    // mutatja), a tétel viszont ott is szerepel — minden napon egy.
+    await tester.tap(find.text('Hét'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Következő hét'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('HÉT · MOST'), findsNothing);
+    expect(find.text('Reggeli műszak'), findsWidgets);
+  });
 
   testWidgets('edzésterv felvitele és megjelenítése', (tester) async {
     // Magas ablak, hogy a lista minden mezője megépüljön — így nem kell

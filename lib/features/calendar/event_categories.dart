@@ -447,51 +447,33 @@ class _CategoryDialogState extends ConsumerState<_CategoryDialog> {
       title: Text(
         widget.editing == null ? 'Új kategória' : 'Kategória szerkesztése',
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _name,
-            autofocus: true,
-            textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _save(),
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              labelText: 'Név',
-              border: OutlineInputBorder(),
+      // Görgethető: az egyedi szín csúszkáival a tartalom kis kijelzőn (vagy
+      // nagy rendszerbetűnél) magasabb lehet, mint a párbeszéd.
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _name,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Név',
+                border: OutlineInputBorder(),
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final color in categoryColors)
-                GestureDetector(
-                  onTap: () => setState(() => _color = color),
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _color == color
-                            ? Theme.of(context).colorScheme.onSurface
-                            : Colors.transparent,
-                        width: 3,
-                      ),
-                    ),
-                    child: _color == color
-                        ? Icon(Icons.check, color: readableOn(color), size: 18)
-                        : null,
-                  ),
-                ),
-            ],
-          ),
-        ],
+            const SizedBox(height: 20),
+            ColorField(
+              colors: categoryColors,
+              value: _color,
+              onChanged: (color) => setState(() => _color = color),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(

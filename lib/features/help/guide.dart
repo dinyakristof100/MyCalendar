@@ -31,10 +31,10 @@ const guideTopics = <GuideTopic>[
     icon: Icons.waving_hand_outlined,
     title: 'Üdv a MyCalendarban!',
     body:
-        'Négy fül van az alsó sávban: Események, Naptár, Edzésnapló és '
-        'Beállítások. Az események a telefonod saját naptárából jönnek, az '
-        'edzésnapló pedig a heti tervedet vezeti. Nézzük végig, mi hol van — '
-        'egy percbe se telik.',
+        'Öt fül van az alsó sávban: Események, Naptár, Beosztás, Edzésnapló '
+        'és Beállítások. Az események a telefonod saját naptárából jönnek, a '
+        'beosztás a heti órarended vagy műszakod, az edzésnapló pedig a heti '
+        'tervedet vezeti. Nézzük végig, mi hol van — egy percbe se telik.',
   ),
   GuideTopic(
     icon: Icons.event_outlined,
@@ -88,6 +88,28 @@ const guideTopics = <GuideTopic>[
         'átnevezed, átszínezed vagy törlöd. Az esemény kategóriáját a színes '
         'csipeszre koppintva állítod. A szín a listában és a naptárrácsban is '
         'megjelenik.',
+  ),
+  GuideTopic(
+    icon: Icons.view_timeline_outlined,
+    title: 'Beosztás: ami minden héten ugyanakkor van',
+    body:
+        'Tanórák, műszakok, edzések — a harmadik fülön heti sablont vezetsz, '
+        'nem külön eseményeket. A + gombbal veszel fel egy tételt (mikor, '
+        'meddig, melyik nap), a heti rácsban pedig üres helyre koppintva '
+        'egyből az adott napra és órára nyílik az űrlap. Felül válthatsz napi '
+        'és heti nézet között, lapozni pedig a nyilakkal vagy oldalra húzva '
+        'tudsz — mint a naptárban.',
+  ),
+  GuideTopic(
+    icon: Icons.palette_outlined,
+    title: 'Színcsoportok és A/B hét',
+    body:
+        'A beosztás fejlécében a paletta ikon nyitja a színcsoportokat: az '
+        'összetartozó tételek (előadás, gyakorlat, éjszakás műszak) közös '
+        'színt kapnak, a rács alatt jelmagyarázattal. A melletti menüben '
+        'kapcsolhatsz A és B hetes beosztásra: onnantól minden tételnél '
+        'megadhatod, hogy A, B vagy mindkét héten van — hogy melyik hét van '
+        'épp, azt a naptár dönti el, ott áll a dátum alatt.',
   ),
   GuideTopic(
     icon: Icons.fitness_center_outlined,

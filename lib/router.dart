@@ -8,6 +8,7 @@ import 'features/auth/login_screen.dart';
 import 'features/calendar/calendar_screen.dart';
 import 'features/events/events_screen.dart';
 import 'features/help/guide.dart';
+import 'features/schedule/schedule_screen.dart';
 import 'features/settings/calendars_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/workouts/plan_form_screen.dart';
@@ -54,6 +55,14 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/calendar',
                 builder: (_, _) => const CalendarScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/schedule',
+                builder: (_, _) => const ScheduleScreen(),
               ),
             ],
           ),

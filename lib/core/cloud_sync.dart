@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../features/auth/auth_controller.dart';
 import '../features/calendar/calendar_service.dart';
 import '../features/calendar/event_categories.dart';
+import '../features/schedule/schedule.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/workouts/streak.dart';
 import '../features/workouts/workout_plans.dart';
@@ -25,6 +26,7 @@ const syncedKeys = <String>[
   // A bekapcsolt eszköz-naptárak. A kulcs fiók+név, nem naptár-id: az id
   // eszközspecifikus, a fiók+név páros viszont a másik telefonon is ugyanaz.
   'visibleCalendars3',
+  'schedule', // heti beosztás (hét típusa + színcsoportok + tételek)
   'workoutPlans', // edzéstervek
   'activeWorkoutPlan', // az aktív terv
   'workoutProgress', // a hét teljesített napjai
@@ -123,6 +125,7 @@ final cloudSyncProvider = Provider<void>((ref) {
         // A naptárszűrőt az esemény-providerek figyelik: elég ezt frissíteni,
         // a lista és a naptárnézet magától újratölt.
         ref.invalidate(visibleCalendarsProvider);
+        ref.invalidate(scheduleProvider);
         ref.invalidate(workoutPlansProvider);
         ref.invalidate(workoutProgressProvider);
         ref.invalidate(carryOverProvider);

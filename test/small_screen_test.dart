@@ -79,6 +79,21 @@ Future<void> _goTab(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
 }
 
+/// A/B hetes beosztás minden napra egy hosszú című tétellel, hétfőn egy
+/// átfedővel — a keskeny oszlopban két blokk osztozik.
+String _scheduleJson() {
+  final entries = [
+    for (var day = 1; day <= 7; day++)
+      '{"id":"$day","weekday":$day,"start":480,"end":570,'
+          '"title":"Közgazdaságtan előadás","week":null,'
+          '"note":"B/2 terem, Nagy Béla","groupId":"g1"}',
+    '{"id":"x","weekday":1,"start":510,"end":600,"title":"Konzultáció",'
+        '"week":0,"note":"","groupId":null}',
+  ];
+  return '{"abWeeks":true,"groups":[{"id":"g1","name":"Előadás",'
+      '"color":4285764297}],"entries":[${entries.join(',')}]}';
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -104,11 +119,11 @@ void main() {
         );
   });
 
-  testWidgets('a négy fül kifér a legszűkebb kijelzőn', (tester) async {
+  testWidgets('az öt fül kifér a legszűkebb kijelzőn', (tester) async {
     await _pumpNarrow(tester);
     _expectFits(tester, 'Események fül');
 
-    for (final tab in ['Naptár', 'Edzésnapló', 'Beállítások']) {
+    for (final tab in ['Naptár', 'Beosztás', 'Edzésnapló', 'Beállítások']) {
       await _goTab(tester, tab);
       _expectFits(tester, '$tab fül');
     }
@@ -187,11 +202,48 @@ void main() {
     _expectFits(tester, 'edzésterv űrlap');
   });
 
+  testWidgets('az egyedi színválasztó kifér a legszűkebb kijelzőn', (
+    tester,
+  ) async {
+    await _pumpNarrow(tester);
+    await _goTab(tester, 'Naptár');
+    await tester.tap(find.byTooltip('Kategóriák'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Új kategória'));
+    await tester.pumpAndSettle();
+    _expectFits(tester, 'új kategória párbeszéd');
+
+    // Az egyedi szín három csúszkát nyit — ez a párbeszéd legmagasabb állapota.
+    await tester.tap(find.byTooltip('Egyedi szín'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Slider), findsNWidgets(3));
+    _expectFits(tester, 'egyedi színválasztó');
+  });
+
+  testWidgets('a beosztás mindkét nézete és az űrlapja kifér', (tester) async {
+    // Mind a hét napon van tétel: a heti rács így a legszélesebb (hét oszlop),
+    // és a napi nézet is biztosan tartalmas, bármelyik napon fut a teszt.
+    await prefs.setString('schedule', _scheduleJson());
+    addTearDown(() => prefs.remove('schedule'));
+
+    await _pumpNarrow(tester);
+    await _goTab(tester, 'Beosztás');
+    _expectFits(tester, 'beosztás napi nézet');
+
+    await tester.tap(find.text('Hét'));
+    await tester.pumpAndSettle();
+    _expectFits(tester, 'beosztás heti nézet');
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    _expectFits(tester, 'beosztás tétel űrlap');
+  });
+
   testWidgets('nagyobb rendszerbetűvel is kifér minden', (tester) async {
     await _pumpNarrow(tester, textScale: _bigFont);
     _expectFits(tester, 'Események fül nagy betűvel');
 
-    for (final tab in ['Naptár', 'Edzésnapló', 'Beállítások']) {
+    for (final tab in ['Naptár', 'Beosztás', 'Edzésnapló', 'Beállítások']) {
       await _goTab(tester, tab);
       _expectFits(tester, '$tab fül nagy betűvel');
     }

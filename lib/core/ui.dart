@@ -16,6 +16,272 @@ Color readableOn(Color background) {
   return contrastWithWhite >= contrastWithBlack ? Colors.white : Colors.black;
 }
 
+/// A kézzel válogatott alapszínek + „egyedi szín" csúszkákkal (árnyalat,
+/// telítettség, világosság). A kategóriák és a beosztás-csoportok ugyanezt
+/// használják — egy app, egy színválasztó.
+///
+/// A világosság szándékosan szűk sávban mozog ([_minLightness]–[_maxLightness]):
+/// ugyanaz a szín hol egész kártyányi háttér ([readableOn] szöveggel), hol
+/// vékony akcentcsík egy világos VAGY sötét lapon. A koromfekete és a
+/// hófehér valamelyik témában mindig eltűnne — a sáv ezt zárja ki.
+class ColorField extends StatefulWidget {
+  const ColorField({
+    required this.colors,
+    required this.value,
+    required this.onChanged,
+    super.key,
+  });
+
+  final List<Color> colors;
+  final Color value;
+  final ValueChanged<Color> onChanged;
+
+  @override
+  State<ColorField> createState() => _ColorFieldState();
+}
+
+const _minLightness = 0.3;
+const _maxLightness = 0.8;
+
+class _ColorFieldState extends State<ColorField> {
+  /// Nyitva van-e a csúszkás panel. Mentett egyedi színnél egyből nyitva:
+  /// szerkesztéskor ott folytatod, ahol abbahagytad.
+  late bool _custom = !_inPalette(widget.value);
+
+  bool _inPalette(Color color) =>
+      widget.colors.any((c) => c.toARGB32() == color.toARGB32());
+
+  HSLColor get _hsl => HSLColor.fromColor(widget.value);
+
+  void _setHsl(HSLColor hsl) => widget.onChanged(hsl.toColor());
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hsl = _hsl;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final color in widget.colors)
+              _Swatch(
+                color: color,
+                selected:
+                    !_custom && color.toARGB32() == widget.value.toARGB32(),
+                onTap: () {
+                  setState(() => _custom = false);
+                  widget.onChanged(color);
+                },
+              ),
+            Tooltip(
+              message: 'Egyedi szín',
+              child: _Swatch(
+                color: _custom ? widget.value : null,
+                selected: _custom,
+                icon: Icons.colorize,
+                onTap: () {
+                  // Előbb a billentyűzetet tesszük el: a névmező fókuszban van
+                  // (oda gépeltél), és a billentyűzet alá esnének a csúszkák.
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  setState(() => _custom = true);
+                  // A mostani szín a kiindulás — a világosságot a sávba húzzuk,
+                  // hogy a csúszka ott is találja magát, ahol állhat.
+                  _setHsl(
+                    hsl.withLightness(
+                      hsl.lightness.clamp(_minLightness, _maxLightness),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        if (_custom) ...[
+          const SizedBox(height: 18),
+          _ColorSlider(
+            label: 'Árnyalat',
+            value: hsl.hue,
+            max: 360,
+            track: [
+              for (var hue = 0; hue <= 360; hue += 60)
+                HSLColor.fromAHSL(1, hue.toDouble(), 0.55, 0.55).toColor(),
+            ],
+            onChanged: (value) => _setHsl(hsl.withHue(value)),
+          ),
+          _ColorSlider(
+            label: 'Telítettség',
+            value: hsl.saturation,
+            max: 1,
+            track: [
+              hsl.withSaturation(0).toColor(),
+              hsl.withSaturation(1).toColor(),
+            ],
+            onChanged: (value) => _setHsl(hsl.withSaturation(value)),
+          ),
+          _ColorSlider(
+            label: 'Világosság',
+            value: hsl.lightness.clamp(_minLightness, _maxLightness),
+            min: _minLightness,
+            max: _maxLightness,
+            track: [
+              hsl.withLightness(_minLightness).toColor(),
+              hsl.withLightness(_maxLightness).toColor(),
+            ],
+            onChanged: (value) => _setHsl(hsl.withLightness(value)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'A választott szín világos és sötét témában is látszik.',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Egy színkorong a választóban. [color] nélkül szivárvány — ez az „egyedi".
+class _Swatch extends StatelessWidget {
+  const _Swatch({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
+
+  final Color? color;
+  final bool selected;
+  final IconData? icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = color;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: fill,
+          gradient: fill == null
+              ? const SweepGradient(
+                  colors: [
+                    Color(0xFFCF7A72),
+                    Color(0xFFD8AC5E),
+                    Color(0xFF6FA97F),
+                    Color(0xFF5FA8A3),
+                    Color(0xFF7392C9),
+                    Color(0xFF9B87C9),
+                    Color(0xFFCF7A72),
+                  ],
+                )
+              : null,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected
+                ? Theme.of(context).colorScheme.onSurface
+                : Colors.transparent,
+            width: 3,
+          ),
+        ),
+        child: selected
+            ? Icon(
+                Icons.check,
+                color: readableOn(fill ?? Colors.white),
+                size: 18,
+              )
+            : (icon == null ? null : Icon(icon, color: Colors.white, size: 18)),
+      ),
+    );
+  }
+}
+
+/// Csúszka a saját gradiens sávján — ez mutatja, mit kapsz, ha arra húzod.
+class _ColorSlider extends StatelessWidget {
+  const _ColorSlider({
+    required this.label,
+    required this.value,
+    required this.max,
+    required this.track,
+    required this.onChanged,
+    this.min = 0,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final List<Color> track;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        SizedBox(
+          height: 34,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Padding(
+                // A hüvelykujj a sáv két végén félig kilógna: ennyivel húzzuk
+                // beljebb a gradienst, hogy a szélein is fedje.
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Container(
+                  height: 14,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: track),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                ),
+              ),
+              SliderTheme(
+                // A sávot a gradiens adja, a csúszka csak a hüvelykujjat rajzolja.
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 14,
+                  activeTrackColor: Colors.transparent,
+                  inactiveTrackColor: Colors.transparent,
+                  thumbColor: Colors.white,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 9,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 18,
+                  ),
+                  trackShape: const RectangularSliderTrackShape(),
+                ),
+                child: Slider(
+                  value: value.clamp(min, max),
+                  min: min,
+                  max: max,
+                  label: label,
+                  onChanged: onChanged,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Felirat, ami inkább arányosan kisebb lesz, mint hogy kifusson a helyéből.
 ///
 /// Kis kijelzőn (és nagyobb rendszerbetűnél) egy hosszabb gomb- vagy

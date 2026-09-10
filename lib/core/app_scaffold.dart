@@ -46,7 +46,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   /// Az edzésnapló füle a router ágai között — a rá lépés forgat egyet a
   /// motivációs szövegeken.
-  static const _workoutsTab = 2;
+  static const _workoutsTab = 3;
 
   /// Melyik fülön álltunk az előző felépüléskor: ebből látszik a fülváltás.
   int _tab = 0;
@@ -103,6 +103,11 @@ class _AppShellState extends State<AppShell> {
               icon: Icon(Icons.calendar_month_outlined),
               selectedIcon: Icon(Icons.calendar_month),
               label: 'Naptár',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.view_timeline_outlined),
+              selectedIcon: Icon(Icons.view_timeline),
+              label: 'Beosztás',
             ),
             NavigationDestination(
               icon: Icon(Icons.fitness_center_outlined),
