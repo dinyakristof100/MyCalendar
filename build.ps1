@@ -31,19 +31,15 @@ flutter pub get
 # 3) Build. A Gradle-or (app/build.gradle.kts) a legelejen ellenorzi a registrantot,
 #    es hangos, egyertelmu hibaval all le, ha barmi megis kiesett volna.
 #
-#    A versionCode-ot a telefonon levo verzio fole visszuk. A CI-release 1000+run_number-t
-#    ad (release-apk.yml), a pubspec viszont csak +3 -- e nelkul minden helyi build
-#    INSTALL_FAILED_VERSION_DOWNGRADE-del all le, amig release van fent a keszuleken.
+#    A versionCode a build IDEJE: eltelt percek 2020-01-01 ota -- ugyanaz a keplet,
+#    mint a CI-release-e (release-apk.yml). Igy a helyi es a CI-build egyetlen monoton
+#    sorban all: mindig a frissebb megy fel a telefonra, barmelyik oldalrol jon, es
+#    nincs INSTALL_FAILED_VERSION_DOWNGRADE egyik iranyban sem.
 #    Az adb-t nem tesszuk PATH-fuggove -- az Android SDK platform-tools-bol vesszuk.
 $adb = (Get-Command adb -ErrorAction SilentlyContinue).Source
 if (-not $adb) { $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" }
-$found = & $adb -s RFCW903FSHW shell dumpsys package com.mycalendar.my_calendar |
-  Select-String 'versionCode=(\d+)' | Select-Object -First 1
-# ponytail: a keszuleken talalt szam +1, nem sajat verziosema. Ha nincs telefon vagy
-# nincs fent az app, marad a pubspec erteke. Ceiling: ha tobbszor buildelsz helyben,
-# mint ahany CI-futas van, a debug szama elszalad a release elol -- olyankor a
-# weboldalrol jovo release csak eltavolitas utan megy fel.
-$buildArgs = if ($found) { @("--build-number", ([int]$found.Matches[0].Groups[1].Value + 1)) } else { @() }
+$epoch = [datetime]::new(2020, 1, 1, 0, 0, 0, [System.DateTimeKind]::Utc)
+$buildArgs = @("--build-number", [int]([datetime]::UtcNow - $epoch).TotalMinutes)
 
 Write-Host "==> flutter build apk --debug $buildArgs..." -ForegroundColor Cyan
 flutter build apk --debug @buildArgs

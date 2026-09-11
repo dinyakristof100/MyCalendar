@@ -49,12 +49,16 @@ jobs:
           printf '%s' "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
           echo "RELEASE_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
 
-      # versionName a pubspec-ből, versionCode a futásszámból (>3, monoton nő).
+      # versionName a pubspec-ből, versionCode a build IDEJÉBŐL: eltelt percek
+      # 2020-01-01 óta. Ugyanez a képlet fut a build.ps1-ben is, így a helyi és a
+      # CI-build egyetlen monoton sorban áll — mindig a frissebb megy fel, és nem
+      # előzik le egymást. (A régi 1000+run_number-t a helyi buildek lehagyták: a
+      # telefonon 1046 állt, a release 1041 — se frissítés-ajánlás, se telepítés.)
       - name: Verzió számítása
         run: |
           NAME=$(grep -E '^version:' pubspec.yaml | sed -E 's/^version:[[:space:]]*//; s/\+.*//')
           echo "VNAME=$NAME" >> "$GITHUB_ENV"
-          echo "VC=$((1000 + ${{ github.run_number }}))" >> "$GITHUB_ENV"
+          echo "VC=$(( ($(date -u +%s) - 1577836800) / 60 ))" >> "$GITHUB_ENV"
 
       - run: flutter pub get
 
