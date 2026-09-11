@@ -31,18 +31,6 @@ Future<void> showEntrySheet(
   );
 }
 
-/// A színcsoportok kezelője: létrehozás, átnevezés, átszínezés, törlés.
-Future<void> showScheduleGroups(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    isScrollControlled: true,
-    useSafeArea: true,
-    constraints: _sheetHeight(context),
-    builder: (_) => const _GroupManager(),
-  );
-}
-
 /// A lap sosem ér fel a kijelző tetejéig: marad fölötte egy csík, amiből
 /// látszik, hogy egy lapot húztál fel, nem egy új képernyőt nyitottál. Ami így
 /// nem fér ki, azt a lap belül görgeti.
@@ -76,7 +64,10 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
 
   /// A hét választója: -1 = mindkettő (ez a tárolt `null`), 0 = A, 1 = B.
   late int _week = widget.editing?.week ?? -1;
-  String? _groupId;
+
+  /// A tétel színe — csak szín, név nélkül. A régi, szín nélküli tételek
+  /// szerkesztéskor kapják meg az alapszínt.
+  late Color _color = widget.editing?.color ?? categoryColors.first;
   bool _saving = false;
 
   @override
@@ -86,7 +77,6 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
     if (entry == null) return;
     _title.text = entry.title;
     _note.text = entry.note;
-    _groupId = entry.groupId;
   }
 
   @override
@@ -148,7 +138,7 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
           title: _title.text.trim(),
           week: _week < 0 ? null : _week,
           note: _note.text.trim(),
-          groupId: _groupId,
+          color: _color,
         ),
     ]);
     if (mounted) Navigator.pop(context);
@@ -310,11 +300,11 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
                   onSelectionChanged: (s) => setState(() => _week = s.first),
                 ),
               ],
-              const _Label('Színcsoport'),
-              _GroupPicker(
-                groups: state.groups,
-                selectedId: _groupId,
-                onPick: (id) => setState(() => _groupId = id),
+              const _Label('Szín'),
+              ColorField(
+                colors: categoryColors,
+                value: _color,
+                onChanged: (color) => setState(() => _color = color),
               ),
               const SizedBox(height: 20),
               TextField(
@@ -355,282 +345,6 @@ class _EntrySheetState extends ConsumerState<_EntrySheet> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Csoportválasztó csipeszek + „új csoport" — a lapról nem kell kilépni ahhoz,
-/// hogy legyen mihez rendelni a tételt.
-class _GroupPicker extends ConsumerWidget {
-  const _GroupPicker({
-    required this.groups,
-    required this.selectedId,
-    required this.onPick,
-  });
-
-  final List<ScheduleGroup> groups;
-  final String? selectedId;
-  final ValueChanged<String?> onPick;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => Wrap(
-    spacing: 8,
-    runSpacing: 8,
-    children: [
-      ChoiceChip(
-        label: const Text('Nincs'),
-        selected: selectedId == null,
-        onSelected: (_) => onPick(null),
-      ),
-      for (final group in groups)
-        ChoiceChip(
-          avatar: CircleAvatar(backgroundColor: group.color, radius: 8),
-          label: Text(group.name),
-          selected: group.id == selectedId,
-          onSelected: (_) => onPick(group.id),
-        ),
-      ActionChip(
-        avatar: const Icon(Icons.add, size: 18),
-        label: const Text('Új csoport'),
-        onPressed: () async {
-          final created = await showGroupDialog(context, ref);
-          // Aki most hozta létre, arra akarja tenni a tételt.
-          if (created != null) onPick(created.id);
-        },
-      ),
-    ],
-  );
-}
-
-class _GroupManager extends ConsumerWidget {
-  const _GroupManager();
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
-    ScheduleGroup group,
-  ) async {
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Csoport törlése'),
-        content: Text(
-          '„${group.name}" törlődik. A hozzá tartozó tételek megmaradnak, '
-          'csak elvesztik a színüket.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Mégsem'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('Törlés'),
-          ),
-        ],
-      ),
-    );
-    if (yes ?? false) {
-      await ref.read(scheduleProvider.notifier).removeGroup(group.id);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final state = ref.watch(scheduleProvider);
-
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Színcsoportok',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Az összetartozó tételek kapjanak közös színt — előadás, '
-              'gyakorlat, éjszakás műszak, vagy akár tantárgyanként egy.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (state.groups.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Text(
-                  'Még nincs egyetlen csoportod sem. Hozd létre az elsőt lent.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            for (final group in state.groups)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(backgroundColor: group.color, radius: 12),
-                title: Text(group.name),
-                subtitle: Text(
-                  '${state.entries.where((e) => e.groupId == group.id).length} tétel',
-                ),
-                trailing: PopupMenuButton<bool>(
-                  icon: Icon(
-                    Icons.more_vert,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  tooltip: 'Műveletek',
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: true, child: Text('Szerkesztés')),
-                    PopupMenuItem(value: false, child: Text('Törlés')),
-                  ],
-                  onSelected: (edit) => edit
-                      ? showGroupDialog(context, ref, editing: group)
-                      : _confirmDelete(context, ref, group),
-                ),
-                onTap: () => showGroupDialog(context, ref, editing: group),
-              ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.add),
-              label: const Text('Új csoport'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-              onPressed: () => showGroupDialog(context, ref),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Új csoport felvitele, vagy [editing] átnevezése/átszínezése. A mentett
-/// csoporttal tér vissza, elvetve `null`-lal.
-Future<ScheduleGroup?> showGroupDialog(
-  BuildContext context,
-  WidgetRef ref, {
-  ScheduleGroup? editing,
-}) {
-  return showDialog<ScheduleGroup>(
-    context: context,
-    builder: (_) => _GroupDialog(editing: editing),
-  );
-}
-
-class _GroupDialog extends ConsumerStatefulWidget {
-  const _GroupDialog({this.editing});
-
-  final ScheduleGroup? editing;
-
-  @override
-  ConsumerState<_GroupDialog> createState() => _GroupDialogState();
-}
-
-class _GroupDialogState extends ConsumerState<_GroupDialog> {
-  final _name = TextEditingController();
-  late Color _color = widget.editing?.color ?? _nextFreeColor();
-  bool _saving = false;
-
-  /// Új csoport annak a színnek indul, amit még nem használ senki — így nem
-  /// kell színt keresgélni ahhoz, hogy elkülönüljenek.
-  Color _nextFreeColor() {
-    final used = {
-      for (final g in ref.read(scheduleProvider).groups) g.color.toARGB32(),
-    };
-    for (final color in categoryColors) {
-      if (!used.contains(color.toARGB32())) return color;
-    }
-    return categoryColors.first;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _name.text = widget.editing?.name ?? '';
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final name = _name.text.trim();
-    if (name.isEmpty || _saving) return;
-    setState(() => _saving = true);
-    final saved = await ref
-        .read(scheduleProvider.notifier)
-        .saveGroup(
-          ScheduleGroup(
-            id:
-                widget.editing?.id ??
-                DateTime.now().microsecondsSinceEpoch.toString(),
-            name: name,
-            color: _color,
-          ),
-        );
-    if (mounted) Navigator.pop(context, saved);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.editing == null ? 'Új csoport' : 'Csoport szerkesztése',
-      ),
-      // Görgethető: az egyedi szín csúszkáival a tartalom kis kijelzőn (vagy
-      // nagy rendszerbetűnél) magasabb lehet, mint a párbeszéd.
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _name,
-              autofocus: true,
-              textCapitalization: TextCapitalization.sentences,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _save(),
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Név',
-                hintText: 'pl. Előadás',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ColorField(
-              colors: categoryColors,
-              value: _color,
-              onChanged: (color) => setState(() => _color = color),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Mégsem'),
-        ),
-        FilledButton(
-          onPressed: _name.text.trim().isEmpty || _saving ? null : _save,
-          child: Text(widget.editing == null ? 'Létrehozás' : 'Mentés'),
-        ),
-      ],
     );
   }
 }

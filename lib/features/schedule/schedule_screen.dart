@@ -123,8 +123,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Beosztás ürítése'),
         content: const Text(
-          'Minden tétel törlődik — új félévhez, új munkarendhez tiszta lap. '
-          'A színcsoportok megmaradnak.',
+          'Minden tétel törlődik — új félévhez, új munkarendhez tiszta lap.',
         ),
         actions: [
           TextButton(
@@ -160,11 +159,6 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
             tooltip: 'Ugrás a mai napra',
             onPressed: _goToday,
           ),
-        IconButton(
-          icon: const Icon(Icons.palette_outlined),
-          tooltip: 'Színcsoportok',
-          onPressed: () => showScheduleGroups(context),
-        ),
         PopupMenuButton<int>(
           tooltip: 'A beosztás műveletei',
           itemBuilder: (_) => [
@@ -266,8 +260,6 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                             ),
                     ),
                   ),
-                  if (_weekView && state.groups.isNotEmpty)
-                    _Legend(groups: state.groups),
                 ],
               ),
             ),
@@ -365,10 +357,8 @@ class _Paged extends StatelessWidget {
     switchOutCurve: Curves.easeInCubic,
     // A kimenő és a bejövő lap egymás mellett áll, nem egymás alatt — a
     // rács és a lista is a teljes helyet kéri.
-    layoutBuilder: (current, previous) => Stack(
-      alignment: Alignment.topLeft,
-      children: [...previous, ?current],
-    ),
+    layoutBuilder: (current, previous) =>
+        Stack(alignment: Alignment.topLeft, children: [...previous, ?current]),
     transitionBuilder: (child, animation) {
       final incoming = child.key == pageKey;
       final from = (incoming ? direction : -direction) * 0.14;
@@ -746,7 +736,6 @@ class _DayColumn extends StatelessWidget {
             width: width / lanes[i].lanes - 3,
             child: _Block(
               entry: entries[i],
-              group: state.groupById(entries[i].groupId),
               onTap: () => onEntryTap(entries[i]),
             ),
           ),
@@ -781,17 +770,17 @@ const _nowColor = Color(0xFFE11D48);
 /// negyedórás blokkban csak a cím fér el, a hosszabban az idő és a megjegyzés
 /// is. Amit így sem tudunk kiírni, azt levágjuk — kifutó szöveg helyett.
 class _Block extends StatelessWidget {
-  const _Block({required this.entry, required this.group, required this.onTap});
+  const _Block({required this.entry, required this.onTap});
 
   final ScheduleEntry entry;
-  final ScheduleGroup? group;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = group?.color ?? theme.colorScheme.surfaceContainerHighest;
-    final ink = group == null ? theme.colorScheme.onSurface : readableOn(color);
+    final own = entry.color;
+    final color = own ?? theme.colorScheme.surfaceContainerHighest;
+    final ink = own == null ? theme.colorScheme.onSurface : readableOn(color);
     final height = entry.minutes * _pxPerMin;
 
     return GestureDetector(
@@ -800,7 +789,7 @@ class _Block extends StatelessWidget {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(10),
-          border: group == null
+          border: own == null
               ? Border.all(color: theme.colorScheme.outlineVariant)
               : null,
         ),
@@ -850,44 +839,6 @@ class _Block extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// A színcsoportok jelmagyarázata a heti rács alatt: keskeny oszlopban a
-/// blokkra nem fér ki minden, a szín viszont ott is beszél.
-class _Legend extends StatelessWidget {
-  const _Legend({required this.groups});
-
-  final List<ScheduleGroup> groups;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 6,
-        children: [
-          for (final group in groups)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: group.color,
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(group.name, style: theme.textTheme.labelSmall),
-              ],
-            ),
-        ],
       ),
     );
   }
@@ -953,7 +904,6 @@ class _DayView extends StatelessWidget {
             index: i,
             child: _DayCard(
               entry: entries[i],
-              group: state.groupById(entries[i].groupId),
               onTap: () => onEntryTap(entries[i]),
               nowMinutes: isToday ? nowMinutes : null,
             ),
@@ -967,13 +917,11 @@ class _DayView extends StatelessWidget {
 class _DayCard extends StatelessWidget {
   const _DayCard({
     required this.entry,
-    required this.group,
     required this.onTap,
     required this.nowMinutes,
   });
 
   final ScheduleEntry entry;
-  final ScheduleGroup? group;
   final VoidCallback onTap;
 
   /// A mai nap aktuális perce — más napon `null` (ott nincs se „most", se múlt).
@@ -983,17 +931,17 @@ class _DayCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final color = group?.color ?? scheme.surfaceContainerHighest;
+    final color = entry.color ?? scheme.surfaceContainerHighest;
     final now = nowMinutes;
     final running = now != null && now >= entry.start && now < entry.end;
-    // A kártya ugyanaz a tömör csoportszín, mint a heti rács blokkja — egy
+    // A kártya ugyanaz a tömör szín, mint a heti rács blokkja — egy
     // tétel ugyanúgy nézzen ki mindkét nézetben, akkor is, ha ma már elmúlt.
     // A szöveg fehér vagy fekete, amelyik olvasható rajta.
     //
     // ponytail: nincs külön „letudott" állapot. Áttetszőre halványítva a
     // beállított háttérkép ütne át a kártyán, szürkére váltva pedig pont a
     // heti nézettől térne el. Ami most van, azt a MOST jelvény mutatja.
-    final plain = group == null;
+    final plain = entry.color == null;
     final fill = plain ? scheme.surfaceContainerHighest : color;
     final ink = plain ? scheme.onSurface : readableOn(color);
 
@@ -1068,10 +1016,7 @@ class _DayCard extends StatelessWidget {
                       ],
                       const SizedBox(height: 6),
                       Text(
-                        [
-                          spanLabel(entry.minutes),
-                          if (group != null) group!.name,
-                        ].join(' · '),
+                        spanLabel(entry.minutes),
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: ink.withValues(alpha: 0.75),
                         ),

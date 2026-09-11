@@ -102,11 +102,11 @@ const guideTopics = <GuideTopic>[
   ),
   GuideTopic(
     icon: Icons.palette_outlined,
-    title: 'Színcsoportok és A/B hét',
+    title: 'Színek és A/B hét',
     body:
-        'A beosztás fejlécében a paletta ikon nyitja a színcsoportokat: az '
-        'összetartozó tételek (előadás, gyakorlat, éjszakás műszak) közös '
-        'színt kapnak, a rács alatt jelmagyarázattal. A melletti menüben '
+        'Minden tételnél választhatsz színt az űrlapon — az összetartozók '
+        '(előadás, gyakorlat, éjszakás műszak) így egy ránézésre elkülönülnek. '
+        'A fejléc menüjében '
         'kapcsolhatsz A és B hetes beosztásra: onnantól minden tételnél '
         'megadhatod, hogy A, B vagy mindkét héten van — hogy melyik hét van '
         'épp, azt a naptár dönti el, ott áll a dátum alatt.',

@@ -38,32 +38,6 @@ String spanLabel(int minutes) {
   return '$hours óra $rest perc';
 }
 
-/// Egy színcsoport: ezzel kötöd össze az összetartozó tételeket (pl. minden
-/// előadás kék, minden gyakorlat zöld — vagy tantárgyanként, műszakonként egy).
-class ScheduleGroup {
-  const ScheduleGroup({
-    required this.id,
-    required this.name,
-    required this.color,
-  });
-
-  final String id;
-  final String name;
-  final Color color;
-
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'name': name,
-    'color': color.toARGB32(),
-  };
-
-  static ScheduleGroup fromJson(Map<String, Object?> json) => ScheduleGroup(
-    id: json['id']! as String,
-    name: json['name']! as String,
-    color: Color(json['color']! as int),
-  );
-}
-
 /// A beosztás egy tétele: egy adott napon, adott időben ismétlődő blokk
 /// (tanóra, műszak, bármi, aminek fix helye van a hétben).
 ///
@@ -78,7 +52,7 @@ class ScheduleEntry {
     required this.title,
     this.week,
     this.note = '',
-    this.groupId,
+    this.color,
   });
 
   final String id;
@@ -93,7 +67,9 @@ class ScheduleEntry {
 
   /// Terem, helyszín, oktató — ami segít eligazodni. Lehet üres.
   final String note;
-  final String? groupId;
+
+  /// A tétel színe, név nélkül: `null` = színtelen (semleges kártya).
+  final Color? color;
 
   int get minutes => end - start;
 
@@ -108,7 +84,7 @@ class ScheduleEntry {
     String? title,
     Object? week = _keep,
     String? note,
-    Object? groupId = _keep,
+    Object? color = _keep,
   }) => ScheduleEntry(
     id: id,
     weekday: weekday ?? this.weekday,
@@ -117,7 +93,7 @@ class ScheduleEntry {
     title: title ?? this.title,
     week: week == _keep ? this.week : week as int?,
     note: note ?? this.note,
-    groupId: groupId == _keep ? this.groupId : groupId as String?,
+    color: color == _keep ? this.color : color as Color?,
   );
 
   Map<String, Object?> toJson() => {
@@ -128,49 +104,46 @@ class ScheduleEntry {
     'title': title,
     'week': week,
     'note': note,
-    'groupId': groupId,
+    'color': color?.toARGB32(),
   };
 
-  static ScheduleEntry fromJson(Map<String, Object?> json) => ScheduleEntry(
-    id: json['id']! as String,
-    weekday: json['weekday']! as int,
-    start: json['start']! as int,
-    end: json['end']! as int,
-    title: json['title']! as String,
-    week: json['week'] as int?,
-    note: (json['note'] as String?) ?? '',
-    groupId: json['groupId'] as String?,
-  );
+  /// [groupColors]: a régi színcsoportok színe azonosító szerint — a korábban
+  /// felvitt tételek `groupId`-ja így lesz sima szín, nem kell újra felvinni
+  /// őket.
+  static ScheduleEntry fromJson(
+    Map<String, Object?> json, [
+    Map<String, int> groupColors = const {},
+  ]) {
+    final argb =
+        (json['color'] as int?) ?? groupColors[json['groupId'] as String?];
+    return ScheduleEntry(
+      id: json['id']! as String,
+      weekday: json['weekday']! as int,
+      start: json['start']! as int,
+      end: json['end']! as int,
+      title: json['title']! as String,
+      week: json['week'] as int?,
+      note: (json['note'] as String?) ?? '',
+      color: argb == null ? null : Color(argb),
+    );
+  }
 }
 
 /// A `null` és a „nem adtam meg" megkülönböztetése a [ScheduleEntry.copyWith]-ben.
 const _keep = Object();
 
-/// A teljes beosztás: a hét típusa, a színcsoportok és a tételek.
+/// A teljes beosztás: a hét típusa és a tételek.
 class ScheduleState {
-  const ScheduleState({
-    required this.abWeeks,
-    required this.groups,
-    required this.entries,
-  });
+  const ScheduleState({required this.abWeeks, required this.entries});
 
-  static const empty = ScheduleState(abWeeks: false, groups: [], entries: []);
+  static const empty = ScheduleState(abWeeks: false, entries: []);
 
   /// Két hetes (A/B) beosztás-e. Sima heti beosztásnál minden tétel minden
   /// héten ott van.
   final bool abWeeks;
-  final List<ScheduleGroup> groups;
   final List<ScheduleEntry> entries;
 
   int get weeks => abWeeks ? 2 : 1;
-
-  ScheduleGroup? groupById(String? id) {
-    if (id == null) return null;
-    for (final g in groups) {
-      if (g.id == id) return g;
-    }
-    return null;
-  }
 
   /// A [day] dátumra eső hét indexe: sima beosztásnál mindig 0.
   int weekOf(DateTime day) => weekIndexOf(day, weeks: weeks);
@@ -188,21 +161,27 @@ class ScheduleState {
 
   Map<String, Object?> toJson() => {
     'abWeeks': abWeeks,
-    'groups': [for (final g in groups) g.toJson()],
     'entries': [for (final e in entries) e.toJson()],
   };
 
-  static ScheduleState fromJson(Map<String, Object?> json) => ScheduleState(
-    abWeeks: (json['abWeeks'] as bool?) ?? false,
-    groups: [
+  static ScheduleState fromJson(Map<String, Object?> json) {
+    // A régi formátum színcsoportjai: csak a színük kell, a tételek azt
+    // öröklik. Mentéskor már nem írjuk ki őket.
+    final groupColors = {
       for (final raw in (json['groups'] as List?) ?? const [])
-        ScheduleGroup.fromJson((raw as Map).cast<String, Object?>()),
-    ],
-    entries: [
-      for (final raw in (json['entries'] as List?) ?? const [])
-        ScheduleEntry.fromJson((raw as Map).cast<String, Object?>()),
-    ],
-  );
+        (raw as Map)['id'] as String: raw['color'] as int,
+    };
+    return ScheduleState(
+      abWeeks: (json['abWeeks'] as bool?) ?? false,
+      entries: [
+        for (final raw in (json['entries'] as List?) ?? const [])
+          ScheduleEntry.fromJson(
+            (raw as Map).cast<String, Object?>(),
+            groupColors,
+          ),
+      ],
+    );
+  }
 }
 
 /// Egy tétel helye a heti rács oszlopában: hányadik sávban áll, és hány sávra
@@ -298,36 +277,6 @@ class ScheduleController extends Notifier<ScheduleState> {
     await _save();
   }
 
-  Future<ScheduleGroup> saveGroup(ScheduleGroup group) async {
-    final exists = state.groups.any((g) => g.id == group.id);
-    state = _with(
-      groups: exists
-          ? [
-              for (final g in state.groups)
-                if (g.id == group.id) group else g,
-            ]
-          : [...state.groups, group],
-    );
-    await _save();
-    return group;
-  }
-
-  /// Csoport törlése: a rá hivatkozó tételek nem tűnnek el, csak elvesztik a
-  /// színüket — különben egy nem létező csoportra mutatnának.
-  Future<void> removeGroup(String id) async {
-    state = _with(
-      groups: [
-        for (final g in state.groups)
-          if (g.id != id) g,
-      ],
-      entries: [
-        for (final e in state.entries)
-          if (e.groupId == id) e.copyWith(groupId: null) else e,
-      ],
-    );
-    await _save();
-  }
-
   /// Váltás sima heti és A/B beosztás között.
   ///
   /// A/B-re váltva a meglévő tételek mindkét héten megmaradnak (`week == null`),
@@ -350,15 +299,11 @@ class ScheduleController extends Notifier<ScheduleState> {
   /// Hány tétel élne csak a B héten — ennyit vinne el a sima hetire váltás.
   int get bOnlyCount => state.entries.where((e) => e.week == 1).length;
 
-  ScheduleState _with({
-    bool? abWeeks,
-    List<ScheduleGroup>? groups,
-    List<ScheduleEntry>? entries,
-  }) => ScheduleState(
-    abWeeks: abWeeks ?? state.abWeeks,
-    groups: groups ?? state.groups,
-    entries: entries ?? state.entries,
-  );
+  ScheduleState _with({bool? abWeeks, List<ScheduleEntry>? entries}) =>
+      ScheduleState(
+        abWeeks: abWeeks ?? state.abWeeks,
+        entries: entries ?? state.entries,
+      );
 
   Future<void> _save() => saveSetting(scheduleKey, jsonEncode(state.toJson()));
 }

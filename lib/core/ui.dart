@@ -17,7 +17,7 @@ Color readableOn(Color background) {
 }
 
 /// A kézzel válogatott alapszínek + „egyedi szín" csúszkákkal (árnyalat,
-/// telítettség, világosság). A kategóriák és a beosztás-csoportok ugyanezt
+/// telítettség, világosság). A kategóriák és a beosztás tételei ugyanezt
 /// használják — egy app, egy színválasztó.
 ///
 /// A világosság szándékosan szűk sávban mozog ([_minLightness]–[_maxLightness]):

@@ -32,9 +32,6 @@ void main() {
   test('a beosztás oda-vissza alakítható JSON-be', () {
     final state = ScheduleState(
       abWeeks: true,
-      groups: const [
-        ScheduleGroup(id: 'g1', name: 'Előadás', color: Color(0xFF7392C9)),
-      ],
       entries: [
         _entry('1', week: 1),
         ScheduleEntry(
@@ -44,37 +41,76 @@ void main() {
           end: 11 * 60,
           title: 'Közgazdaságtan',
           note: 'B/2 terem',
-          groupId: 'g1',
+          color: const Color(0xFF7392C9),
         ),
       ],
     );
 
     final back = ScheduleState.fromJson(state.toJson());
     expect(back.abWeeks, isTrue);
-    expect(back.groups.single.name, 'Előadás');
     expect(back.entries.first.week, 1);
+    expect(back.entries.first.color, isNull);
     expect(back.entries.last.note, 'B/2 terem');
-    expect(back.entries.last.groupId, 'g1');
-    expect(back.groupById('g1')?.color, const Color(0xFF7392C9));
+    expect(back.entries.last.color, const Color(0xFF7392C9));
   });
 
-  test('a hét nélküli tétel mindkét héten ott van, a kötött csak a sajátján', () {
-    final both = _entry('mind');
-    final aWeek = _entry('a', week: 0);
-    final bWeek = _entry('b', week: 1);
+  test('a régi színcsoportos beosztás színe a tételre kerül', () {
+    // A csoportok korábbi formátuma: a tétel `groupId`-val hivatkozott rá.
+    final state = ScheduleState.fromJson({
+      'abWeeks': false,
+      'groups': [
+        {'id': 'g1', 'name': 'Előadás', 'color': 0xFF7392C9},
+      ],
+      'entries': [
+        {
+          'id': '1',
+          'weekday': 1,
+          'start': 480,
+          'end': 570,
+          'title': 'Közgazdaságtan',
+          'groupId': 'g1',
+        },
+        {
+          'id': '2',
+          'weekday': 2,
+          'start': 480,
+          'end': 570,
+          'title': 'Szünet',
+          'groupId': null,
+        },
+      ],
+    });
 
-    expect(both.showsOn(DateTime.monday, 0), isTrue);
-    expect(both.showsOn(DateTime.monday, 1), isTrue);
-    expect(both.showsOn(DateTime.tuesday, 0), isFalse);
-    expect(aWeek.showsOn(DateTime.monday, 0), isTrue);
-    expect(aWeek.showsOn(DateTime.monday, 1), isFalse);
-    expect(bWeek.showsOn(DateTime.monday, 1), isTrue);
+    expect(state.entries.first.color, const Color(0xFF7392C9));
+    expect(state.entries.last.color, isNull);
+    // Mentéskor már csak a szín megy ki, csoport nélkül.
+    expect(state.toJson()['groups'], isNull);
+    expect(
+      (state.toJson()['entries']! as List).first,
+      containsPair('color', 0xFF7392C9),
+    );
   });
+
+  test(
+    'a hét nélküli tétel mindkét héten ott van, a kötött csak a sajátján',
+    () {
+      final both = _entry('mind');
+      final aWeek = _entry('a', week: 0);
+      final bWeek = _entry('b', week: 1);
+
+      expect(both.showsOn(DateTime.monday, 0), isTrue);
+      expect(both.showsOn(DateTime.monday, 1), isTrue);
+      expect(both.showsOn(DateTime.tuesday, 0), isFalse);
+      expect(aWeek.showsOn(DateTime.monday, 0), isTrue);
+      expect(aWeek.showsOn(DateTime.monday, 1), isFalse);
+      expect(bWeek.showsOn(DateTime.monday, 1), isTrue);
+    },
+  );
 
   test('a nap tételei kezdés szerint jönnek', () {
     final state = ScheduleState(
       abWeeks: false,
-      groups: const [],
+
       entries: [
         _entry('kesoi', start: 14 * 60, end: 15 * 60),
         _entry('korai', start: 8 * 60, end: 9 * 60),
@@ -87,8 +123,8 @@ void main() {
   });
 
   test('sima beosztásnál minden hét a 0. — A/B-nél váltakoznak', () {
-    const simple = ScheduleState(abWeeks: false, groups: [], entries: []);
-    const ab = ScheduleState(abWeeks: true, groups: [], entries: []);
+    const simple = ScheduleState(abWeeks: false, entries: []);
+    const ab = ScheduleState(abWeeks: true, entries: []);
     final monday = DateTime(2026, 9, 7);
     final nextMonday = DateTime(2026, 9, 14);
 
@@ -157,7 +193,9 @@ void main() {
       final controller = c.read(scheduleProvider.notifier);
       await controller.setAbWeeks(true);
       await controller.saveEntry(_entry('a', week: 0));
-      await controller.saveEntry(_entry('b', weekday: DateTime.tuesday, week: 1));
+      await controller.saveEntry(
+        _entry('b', weekday: DateTime.tuesday, week: 1),
+      );
       expect(controller.bOnlyCount, 1);
 
       await controller.setAbWeeks(false);
@@ -168,37 +206,30 @@ void main() {
     });
 
     test('a mentett beosztást új munkamenet visszaolvassa', () async {
-      await container().read(scheduleProvider.notifier).saveEntry(
-        _entry('1', start: 10 * 60, end: 11 * 60),
-      );
+      await container()
+          .read(scheduleProvider.notifier)
+          .saveEntry(_entry('1', start: 10 * 60, end: 11 * 60));
 
       final reopened = container();
       expect(reopened.read(scheduleProvider).entries.single.start, 10 * 60);
     });
 
-    test('csoport törlésekor a tételek megmaradnak, csak a szín tűnik el',
-        () async {
-      final c = container();
-      final controller = c.read(scheduleProvider.notifier);
-      final group = await controller.saveGroup(
-        const ScheduleGroup(id: 'g1', name: 'Előadás', color: Color(0xFF6FA97F)),
-      );
-      await controller.saveEntry(
-        ScheduleEntry(
-          id: '1',
-          weekday: DateTime.monday,
-          start: 8 * 60,
-          end: 9 * 60,
-          title: 'Közgazdaságtan',
-          groupId: group.id,
-        ),
-      );
+    test('a tétel színe túléli az újranyitást', () async {
+      await container()
+          .read(scheduleProvider.notifier)
+          .saveEntry(
+            const ScheduleEntry(
+              id: '1',
+              weekday: DateTime.monday,
+              start: 8 * 60,
+              end: 9 * 60,
+              title: 'Közgazdaságtan',
+              color: Color(0xFF6FA97F),
+            ),
+          );
 
-      await controller.removeGroup('g1');
-      final state = c.read(scheduleProvider);
-      expect(state.groups, isEmpty);
-      expect(state.entries.single.title, 'Közgazdaságtan');
-      expect(state.entries.single.groupId, isNull);
+      final state = container().read(scheduleProvider);
+      expect(state.entries.single.color, const Color(0xFF6FA97F));
     });
   });
 
