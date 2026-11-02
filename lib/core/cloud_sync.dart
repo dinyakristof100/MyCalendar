@@ -32,6 +32,7 @@ const syncedKeys = <String>[
   'workoutProgress', // a hét teljesített napjai
   'carryOverWorkouts', // le nem edzett napok átcsúsztatása
   'workoutStreak', // heti sorozat (hány hét zsinórban)
+  'workoutHistory', // az elmúlt hetek napjai (visszalapozáshoz)
   'remindDayBefore', // emlékeztető egy nappal az esemény előtt
   'remindHourBefore', // emlékeztető egy órával az esemény előtt
   'remindWorkout', // esti kérdés az edzésről
@@ -128,6 +129,7 @@ final cloudSyncProvider = Provider<void>((ref) {
         ref.invalidate(scheduleProvider);
         ref.invalidate(workoutPlansProvider);
         ref.invalidate(workoutProgressProvider);
+        ref.invalidate(workoutHistoryProvider);
         ref.invalidate(carryOverProvider);
         ref.invalidate(streakProvider);
       }),

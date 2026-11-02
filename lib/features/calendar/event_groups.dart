@@ -43,6 +43,18 @@ const _months = [
 /// A hónap magyar neve (1 = január).
 String monthName(int month) => _months[month - 1];
 
+/// „szeptember 8–14." — hónapfordulón mindkét hónap nevével.
+String weekRangeLabel(DateTime weekStart) {
+  // Napkonstruktorral: a Duration-összeadás az őszi óraátállítás hetén
+  // szombat 23:00-ra csúszna.
+  final end = DateTime(weekStart.year, weekStart.month, weekStart.day + 6);
+  if (end.month == weekStart.month) {
+    return '${monthName(weekStart.month)} ${weekStart.day}–${end.day}.';
+  }
+  return '${monthName(weekStart.month)} ${weekStart.day}. – '
+      '${monthName(end.month)} ${end.day}.';
+}
+
 DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
 /// „Ma”, „Holnap”, egyébként „július 25., szombat”.

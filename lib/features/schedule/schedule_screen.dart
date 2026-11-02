@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_scaffold.dart';
 import '../../core/ui.dart';
-import '../calendar/event_groups.dart' show monthName;
+import '../calendar/event_groups.dart' show monthName, weekRangeLabel;
 import '../workouts/workout_plans.dart' show weekStartOf;
 import 'entry_sheet.dart';
 import 'schedule.dart';
@@ -210,7 +210,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                   ),
                   _NavBar(
                     label: _weekView
-                        ? _weekLabel(weekStart)
+                        ? weekRangeLabel(weekStart)
                         : _dayLabel(_day, now),
                     weekBadge: state.abWeeks
                         ? _WeekBadge(
@@ -223,7 +223,7 @@ class _ScheduleScreenState extends ConsumerState<ScheduleScreen> {
                     isWeek: _weekView,
                   ),
                   Expanded(
-                    child: _Paged(
+                    child: Paged(
                       // Lapozáskor a látott egység változik: napi nézetben a
                       // nap, hetiben a hét — csak ilyenkor animálunk.
                       pageKey: ValueKey(
@@ -272,16 +272,6 @@ String _dayLabel(DateTime day, DateTime now) {
   final today = DateTime(now.year, now.month, now.day) == day;
   final name = today ? 'Ma' : scheduleWeekdayNames[day.weekday - 1];
   return '$name · ${monthName(day.month)} ${day.day}.';
-}
-
-/// „szeptember 8–14." — hónapfordulón mindkét hónap nevével.
-String _weekLabel(DateTime weekStart) {
-  final end = weekStart.add(const Duration(days: 6));
-  if (end.month == weekStart.month) {
-    return '${monthName(weekStart.month)} ${weekStart.day}–${end.day}.';
-  }
-  return '${monthName(weekStart.month)} ${weekStart.day}. – '
-      '${monthName(end.month)} ${end.day}.';
 }
 
 /// Lapozósor: napi nézetben napot, heti nézetben hetet léptet.
@@ -334,47 +324,6 @@ class _NavBar extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Lapozás-animáció: az új nap/hét a lapozás irányából úszik be, a régi
-/// ellenkező irányba ki. Rövid és halk — csak annyit mond, hogy „lapoztál",
-/// nem várakoztat. Ugyanaz a mozdulat, mint a naptár hónapváltásánál.
-class _Paged extends StatelessWidget {
-  const _Paged({
-    required this.pageKey,
-    required this.direction,
-    required this.child,
-  });
-
-  final Key pageKey;
-  final int direction;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => AnimatedSwitcher(
-    duration: const Duration(milliseconds: 220),
-    switchInCurve: Curves.easeOutCubic,
-    switchOutCurve: Curves.easeInCubic,
-    // A kimenő és a bejövő lap egymás mellett áll, nem egymás alatt — a
-    // rács és a lista is a teljes helyet kéri.
-    layoutBuilder: (current, previous) =>
-        Stack(alignment: Alignment.topLeft, children: [...previous, ?current]),
-    transitionBuilder: (child, animation) {
-      final incoming = child.key == pageKey;
-      final from = (incoming ? direction : -direction) * 0.14;
-      return FadeTransition(
-        opacity: animation,
-        child: SlideTransition(
-          position: Tween(
-            begin: Offset(from, 0),
-            end: Offset.zero,
-          ).animate(animation),
-          child: child,
-        ),
-      );
-    },
-    child: KeyedSubtree(key: pageKey, child: child),
-  );
 }
 
 /// „A HÉT" / „B HÉT" jelvény. A most futó hét kitöltve és „· MOST" felirattal

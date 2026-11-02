@@ -134,4 +134,61 @@ void main() {
       isEmpty,
     );
   });
+
+  test('pastWeek: a történetből olvas, más terv napjait nem keveri bele', () {
+    final plan = _plan([
+      ['mell', 'hát'],
+    ]);
+    final entry = WeekProgress(planId: 'a', weekStart: w1, done: const {1});
+    expect(
+      pastWeek(
+        w1,
+        plan,
+        stored: const WeekProgress(),
+        history: {w1: entry},
+        completed: false,
+      ).done,
+      {1},
+    );
+    // A tárolt állapot még a múlt hét: abból is látszik.
+    expect(
+      pastWeek(
+        w1,
+        plan,
+        stored: entry,
+        history: const {},
+        completed: false,
+      ).done,
+      {1},
+    );
+    final other = WeekProgress(planId: 'x', weekStart: w1, done: const {0});
+    expect(
+      pastWeek(
+        w1,
+        plan,
+        stored: other,
+        history: const {},
+        completed: false,
+      ).done,
+      isEmpty,
+    );
+  });
+
+  test(
+    'pastWeek: a sorozatban teljes, napra bontva ismeretlen hét — mind kész',
+    () {
+      final plan = _plan([
+        ['mell', 'hát'],
+      ]);
+      final week = pastWeek(
+        w1,
+        plan,
+        stored: const WeekProgress(),
+        history: const {},
+        completed: true,
+      );
+      expect(week.done, {0, 1});
+      expect(week.fullyTrained(plan), isTrue);
+    },
+  );
 }

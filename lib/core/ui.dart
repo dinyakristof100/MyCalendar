@@ -419,3 +419,45 @@ class _AppearState extends State<Appear> with SingleTickerProviderStateMixin {
     );
   }
 }
+
+/// Lapozás-animáció: az új nap/hét a lapozás irányából úszik be, a régi
+/// ellenkező irányba ki. Rövid és halk — csak annyit mond, hogy „lapoztál",
+/// nem várakoztat. Ugyanaz a mozdulat, mint a naptár hónapváltásánál.
+class Paged extends StatelessWidget {
+  const Paged({
+    super.key,
+    required this.pageKey,
+    required this.direction,
+    required this.child,
+  });
+
+  final Key pageKey;
+  final int direction;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedSwitcher(
+    duration: const Duration(milliseconds: 220),
+    switchInCurve: Curves.easeOutCubic,
+    switchOutCurve: Curves.easeInCubic,
+    // A kimenő és a bejövő lap egymás mellett áll, nem egymás alatt — a
+    // rács és a lista is a teljes helyet kéri.
+    layoutBuilder: (current, previous) =>
+        Stack(alignment: Alignment.topLeft, children: [...previous, ?current]),
+    transitionBuilder: (child, animation) {
+      final incoming = child.key == pageKey;
+      final from = (incoming ? direction : -direction) * 0.14;
+      return FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween(
+            begin: Offset(from, 0),
+            end: Offset.zero,
+          ).animate(animation),
+          child: child,
+        ),
+      );
+    },
+    child: KeyedSubtree(key: pageKey, child: child),
+  );
+}

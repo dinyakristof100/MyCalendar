@@ -615,6 +615,61 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a hetek lapozhatók, és a múlt hét utólag is felírható', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1080, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await prefs.setString(
+      'workoutPlans',
+      '[{"id":"s1","name":"Napi","weeks":[["teljes test"]]}]',
+    );
+    await prefs.setString('activeWorkoutPlan', 's1');
+    addTearDown(() async {
+      await prefs.remove('workoutPlans');
+      await prefs.remove('activeWorkoutPlan');
+      await prefs.remove('workoutProgress');
+      await prefs.remove('workoutHistory');
+      await prefs.remove('workoutStreak');
+    });
+
+    await tester.pumpWidget(_appWith(const AsyncValue.data(AuthUser('Teszt'))));
+    await tester.pumpAndSettle();
+    await _goTab(tester, 'Edzésnapló');
+    expect(find.text('EZ A HÉT'), findsOneWidget);
+
+    // Húzással vissza a múlt hétre, ott felírjuk az elfelejtett edzést.
+    await tester.fling(find.text('teljes test'), const Offset(600, 0), 1500);
+    await tester.pumpAndSettle();
+    expect(find.text('EZ A HÉT'), findsNothing);
+    expect(
+      find.text('Sima heti terv · azon a héten 0/1 megvan'),
+      findsOneWidget,
+    );
+    await tester.longPress(find.text('teljes test'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Megvolt'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(find.text('1 hét zsinórban'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    // Előre lapozva a mai hét érintetlen, a sorozat viszont él.
+    await tester.tap(find.byTooltip('Következő hét'));
+    await tester.pumpAndSettle();
+    expect(find.text('EZ A HÉT'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsNothing);
+    expect(find.text('1 hét zsinórban'), findsOneWidget);
+
+    // A jövő hét csak betekintés: hosszú nyomásra nem kérdez.
+    await tester.tap(find.byTooltip('Következő hét'));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('teljes test'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mi lett ezzel a nappal?'), findsNothing);
+  });
+
   testWidgets('teljes hét sorozatot indít és jelvényt mutat', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1080, 2400));
     addTearDown(() => tester.binding.setSurfaceSize(null));

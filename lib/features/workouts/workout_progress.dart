@@ -9,6 +9,11 @@ import 'workout_plans.dart';
 
 const _key = 'workoutProgress';
 const _carryKey = 'carryOverWorkouts';
+const _historyKey = 'workoutHistory';
+
+/// Ennyi elmult hetet orzunk meg napra bontva — ugyanannyit, amennyit a
+/// sorozat hoterkepe. Ennyire lehet visszalapozni is.
+const keepWeeks = 26;
 
 /// A mai nap ejfele — a [WeekProgress.markedOn] merteke.
 ///
@@ -107,6 +112,20 @@ class WeekProgress {
   bool resolvedAll(WorkoutPlan plan) =>
       done.length + skipped.length >= _baseDays(plan) &&
       carried.every((c) => c.resolved);
+
+  WeekProgress copyWith({
+    Set<int>? done,
+    Set<int>? skipped,
+    List<CarriedDay>? carried,
+    DateTime? markedOn,
+  }) => WeekProgress(
+    planId: planId,
+    weekStart: weekStart,
+    done: done ?? this.done,
+    skipped: skipped ?? this.skipped,
+    carried: carried ?? this.carried,
+    markedOn: markedOn ?? this.markedOn,
+  );
 
   Map<String, Object?> toJson() => {
     'planId': planId,
@@ -236,6 +255,92 @@ bool _prevWeekDone(Streak streak, DateTime now) {
   );
 }
 
+/// Egy ELMULT (vagy jovobeli) het kepe a lapozashoz. Forras a tortenet, vagy —
+/// ha az app azota meg nem irt a mai hetre — maga a tarolt allapot. Ha a
+/// sorozat teljesnek tudja a hetet, de napra bontva nincs meg (a tortenet
+/// elotti hetek), minden napot leedzettnek mutatunk: teljes het csak igy lehet.
+WeekProgress pastWeek(
+  DateTime week,
+  WorkoutPlan plan, {
+  required WeekProgress stored,
+  required Map<DateTime, WeekProgress> history,
+  required bool completed,
+}) {
+  final days = plan.daysOfWeekAt(week).length;
+  var entry = history[week] ?? (stored.weekStart == week ? stored : null);
+  if (entry?.planId != plan.id) entry = null;
+  final base = WeekProgress(
+    planId: plan.id,
+    weekStart: week,
+    done: {
+      for (final slot in entry?.done ?? const <int>{})
+        if (slot < days) slot,
+    },
+    skipped: {
+      for (final slot in entry?.skipped ?? const <int>{})
+        if (slot < days) slot,
+    },
+    carried: entry?.carried ?? const [],
+    markedOn: entry?.markedOn,
+  );
+  if (!completed || base.fullyTrained(plan)) return base;
+  return base.copyWith(
+    done: {for (var slot = 0; slot < days; slot++) slot},
+    skipped: const {},
+    carried: [for (final c in base.carried) c.withOutcome(WorkoutOutcome.done)],
+  );
+}
+
+/// Egy masik (nem a mai) het kepe a lapozashoz, lasd [pastWeek]. A mai hetre a
+/// [currentWeekProvider] valo — azt ne innen olvasd: a lapozaskor ujraebredo
+/// tovabbitas build kozben ertesitene a tobbi figyelojet.
+final pastWeekProvider = Provider.family<WeekProgress, DateTime>((ref, week) {
+  final plan = ref.watch(workoutPlansProvider).active;
+  if (plan == null) return WeekProgress(weekStart: week);
+  return pastWeek(
+    week,
+    plan,
+    stored: ref.watch(workoutProgressProvider),
+    history: ref.watch(workoutHistoryProvider),
+    completed: ref.watch(streakProvider).completedWeeks.contains(week),
+  );
+});
+
+/// Az elmult hetek napjai, hetfore kulcsolva. Hetvaltaskor a regi het ide kerul
+/// (lasd [WorkoutProgressController]), es ide ir a visszamenoleges jeloles is.
+final workoutHistoryProvider =
+    NotifierProvider<WorkoutHistoryController, Map<DateTime, WeekProgress>>(
+      WorkoutHistoryController.new,
+    );
+
+class WorkoutHistoryController extends Notifier<Map<DateTime, WeekProgress>> {
+  @override
+  Map<DateTime, WeekProgress> build() {
+    final list = jsonDecode(prefs.getString(_historyKey) ?? '[]') as List;
+    return {
+      for (final raw in list)
+        if (WeekProgress.fromJson((raw as Map).cast<String, Object?>())
+            case final week when week.weekStart != null)
+          week.weekStart!: week,
+    };
+  }
+
+  /// Egy het mentese. Csak a legutobbi [keepWeeks] het megy a JSON-ba.
+  Future<void> put(WeekProgress week) async {
+    state = {...state, week.weekStart!: week};
+    final sorted = state.keys.toList()..sort();
+    await saveSetting(
+      _historyKey,
+      jsonEncode([
+        for (final w in sorted.skip(
+          (sorted.length - keepWeeks).clamp(0, sorted.length),
+        ))
+          state[w]!.toJson(),
+      ]),
+    );
+  }
+}
+
 class WorkoutProgressController extends Notifier<WeekProgress> {
   @override
   WeekProgress build() {
@@ -254,20 +359,58 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
   );
 
   Future<void> _persist(WeekProgress week) async {
+    // Hetvaltas: a regi het a tortenetbe kerul, hogy visszalapozva is meglegyen.
+    if (state.weekStart != null && state.weekStart != week.weekStart) {
+      await ref.read(workoutHistoryProvider.notifier).put(state);
+    }
     state = week;
     // Az ertesitesek ujrautemezeset a workoutNudgeSyncProvider intezi: ez az
     // allapot az o fuggosege.
     await saveSetting(_key, jsonEncode(week.toJson()));
   }
 
-  /// A terv [slot]. sajat napjat [outcome]-ra allitja a mai heten. `null`
-  /// outcome-mal a nap visszakerul nyitott allapotba (tevedes visszavonasa).
+  /// A [week] het (null = a mai) modositasa es mentese. A mai het a rendes uton
+  /// megy. Elmult het a tortenetbe kerul — vagy, ha a tarolt allapot meg pont az
+  /// a het, oda —, es a sorozatban ujraszamolodik. A `markedOn` ilyenkor marad:
+  /// az esti kerdes csak a mai jelolest figyeli.
+  Future<void> _edit(
+    WorkoutPlan plan,
+    DateTime? week,
+    WeekProgress Function(WeekProgress cur) change,
+  ) async {
+    if (week == null || week == weekStartOf(DateTime.now())) {
+      final next = change(_current(plan)).copyWith(markedOn: _today());
+      await _persist(next);
+      await _syncStreak(plan, next);
+      return;
+    }
+    // Nem a pastWeekProvider-en at: az erre a notifierre figyel, onnan
+    // olvasni korkoros fuggoseg lenne.
+    final next = change(
+      pastWeek(
+        week,
+        plan,
+        stored: state,
+        history: ref.read(workoutHistoryProvider),
+        completed: ref.read(streakProvider).completedWeeks.contains(week),
+      ),
+    );
+    await (state.weekStart == week
+        ? _persist(next)
+        : ref.read(workoutHistoryProvider.notifier).put(next));
+    await ref
+        .read(streakProvider.notifier)
+        .markWeek(week, done: next.fullyTrained(plan));
+  }
+
+  /// A terv [slot]. sajat napjat [outcome]-ra allitja a [week] heten (null = a
+  /// mai). `null` outcome-mal a nap visszakerul nyitott allapotba.
   Future<void> markBase(
     WorkoutPlan plan,
     int slot,
-    WorkoutOutcome? outcome,
-  ) async {
-    final cur = _current(plan);
+    WorkoutOutcome? outcome, {
+    DateTime? week,
+  }) => _edit(plan, week, (cur) {
     final done = {...cur.done}..remove(slot);
     final skipped = {...cur.skipped}..remove(slot);
     switch (outcome) {
@@ -278,40 +421,26 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
       case null:
         break;
     }
-    final week = WeekProgress(
-      planId: cur.planId,
-      weekStart: cur.weekStart,
-      done: done,
-      skipped: skipped,
-      carried: cur.carried,
-      markedOn: _today(),
-    );
-    await _persist(week);
-    await _syncStreak(plan, week);
-  }
+    return cur.copyWith(done: done, skipped: skipped);
+  });
 
-  /// Az [index]. athozott napot [outcome]-ra allitja a mai heten. `null`
-  /// outcome-mal a nap ujra nyitott lesz.
+  /// Az [index]. athozott napot [outcome]-ra allitja a [week] heten (null = a
+  /// mai). `null` outcome-mal a nap ujra nyitott lesz.
   Future<void> markCarried(
     WorkoutPlan plan,
     int index,
-    WorkoutOutcome? outcome,
-  ) async {
-    final cur = _current(plan);
-    final week = WeekProgress(
-      planId: cur.planId,
-      weekStart: cur.weekStart,
-      done: cur.done,
-      skipped: cur.skipped,
+    WorkoutOutcome? outcome, {
+    DateTime? week,
+  }) => _edit(
+    plan,
+    week,
+    (cur) => cur.copyWith(
       carried: [
         for (var i = 0; i < cur.carried.length; i++)
           i == index ? cur.carried[i].withOutcome(outcome) : cur.carried[i],
       ],
-      markedOn: _today(),
-    );
-    await _persist(week);
-    await _syncStreak(plan, week);
-  }
+    ),
+  );
 
   /// Az esti ertesites „Megvolt ✓" gombja: a het egyetlen nyitott napjat
   /// pipalja le, a rendes uton (`markBase`/`markCarried`), hogy a sorozat is

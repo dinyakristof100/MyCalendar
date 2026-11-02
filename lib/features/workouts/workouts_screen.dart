@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/app_scaffold.dart';
 import '../../core/ui.dart';
+import '../calendar/event_groups.dart' show weekRangeLabel;
 import 'motivation.dart';
 import 'streak.dart';
 import 'workout_plans.dart';
@@ -105,15 +106,51 @@ class _NoPlanYet extends StatelessWidget {
   }
 }
 
-class _PlanView extends ConsumerWidget {
+class _PlanView extends ConsumerStatefulWidget {
   const _PlanView({required this.plans, required this.plan});
 
   final List<WorkoutPlan> plans;
   final WorkoutPlan plan;
 
+  @override
+  ConsumerState<_PlanView> createState() => _PlanViewState();
+}
+
+/// A hét lapozható, mint a naptárban a hónapok: vissza [keepWeeks] hétig
+/// (eddig őrizzük a napokat), és utólag is jelölhető, mi volt leedzve. Előre
+/// csak [_aheadWeeks] hétig — az betekintés a tervbe (A/B hét), jelölni nem lehet.
+class _PlanViewState extends ConsumerState<_PlanView> {
+  static const _aheadWeeks = 4;
+
+  /// A látott hét a mai héthez képest (0 = ez a hét, -1 = a múlt hét).
+  int _offset = 0;
+  int _slideDir = 1; // az utolsó lapozás iránya, a csúszó animációhoz
+
+  WorkoutPlan get plan => widget.plan;
+
+  /// Lapoz [steps] hetet; a határon nem csinál semmit. Igaz, ha lapozott.
+  bool _shift(int steps) {
+    final next = (_offset + steps).clamp(-(keepWeeks - 1), _aheadWeeks);
+    if (next == _offset) return false;
+    setState(() {
+      _slideDir = steps.sign;
+      _offset = next;
+    });
+    return true;
+  }
+
+  /// Vízszintes húzás: jobbról balra előre, balról jobbra vissza — mint a
+  /// naptárban a hónapok között.
+  void _onSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity.abs() < 300) return;
+    // Csak a tényleges lapozás rezeg — a küszöb alatti húzás és a határ nem.
+    if (_shift(velocity < 0 ? 1 : -1)) HapticFeedback.selectionClick();
+  }
+
   /// Terv törlése megerősítéssel. A heti haladás a tervhez tartozik, ezért vele
   /// együtt nullázódik — ezt előre meg is mondjuk.
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+  Future<void> _confirmDelete() async {
     final yes = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -150,7 +187,6 @@ class _PlanView extends ConsumerWidget {
   /// A `null` kimenet (nyitott nap) és a „mégsem" nem ugyanaz, ezért a válasz
   /// egyelemű rekordba csomagolva jön: `null` = mégsem, `(null,)` = nyitottra.
   Future<(WorkoutOutcome?,)?> _ask(
-    BuildContext context,
     String label,
     String content, {
     required bool resolved,
@@ -185,33 +221,43 @@ class _PlanView extends ConsumerWidget {
 
   /// Megkérdi a kimenetet, elmenti, majd visszajelez: leedzésre motiváció (a hét
   /// utolsó edzése külön ünneplést kap), kihagyásra és visszaállításra rövid
-  /// nyugtázás.
+  /// nyugtázás. Elmúlt hétnél a dicséret helyett azt mondja meg, hol tart az
+  /// a hét — és ha ezzel teljes lett, a sorozatot.
   Future<void> _mark(
-    BuildContext context,
-    WidgetRef ref,
     String label,
     String content, {
+    required DateTime monday,
     required bool resolved,
     required Future<void> Function(WorkoutOutcome?) apply,
   }) async {
-    final answer = await _ask(context, label, content, resolved: resolved);
+    final answer = await _ask(label, content, resolved: resolved);
     if (answer == null) return;
     final outcome = answer.$1;
     // Egyetlen rezgés az egész appban: a leedzett nap az, ami megérdemli.
     if (outcome == WorkoutOutcome.done) HapticFeedback.mediumImpact();
     await apply(outcome);
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     // A sorozatot az `apply` már frissítette (ha teljes lett a hét) — a friss
     // értéket olvassuk, hogy a dicséret is kiírhassa.
     final now = DateTime.now();
-    final week = ref.read(currentWeekProvider);
+    final past = monday != weekStartOf(now);
+    final week = past
+        ? ref.read(pastWeekProvider(monday))
+        : ref.read(currentWeekProvider);
+    final streak = ref.read(streakProvider).live(now);
     final message = switch (outcome) {
+      WorkoutOutcome.done when past && week.fullyTrained(plan) =>
+        'Utólag felírva — az a hét teljes!'
+            '${streak >= 2 ? ' 🔥 $streak hét zsinórban.' : ''}',
+      WorkoutOutcome.done when past =>
+        'Utólag felírva — azon a héten '
+            '${week.trainedCount(plan)}/${week.targetCount(plan)} megvan.',
       WorkoutOutcome.done => praiseFor(
         done: week.trainedCount(plan),
         total: week.targetCount(plan),
         day: now,
-        streak: ref.read(streakProvider).live(now),
+        streak: streak,
         spin: motivationSpin.value,
       ),
       WorkoutOutcome.skipped =>
@@ -228,163 +274,180 @@ class _PlanView extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final now = DateTime.now();
-    final thisWeek = weekIndexOf(now, weeks: plan.weeks.length);
-    final week = ref.watch(currentWeekProvider);
+    final thisMonday = weekStartOf(now);
+    final monday = DateTime(
+      thisMonday.year,
+      thisMonday.month,
+      thisMonday.day + 7 * _offset,
+    );
+    final isCurrent = _offset == 0;
+    // A jövő nem jelölhető; a mai és az elmúlt hetek igen — a lezárt nap is,
+    // hogy a félrenyomott pipa visszavonható legyen.
+    final editable = _offset <= 0;
+    final days = plan.daysOfWeekAt(monday);
+    final week = isCurrent
+        ? ref.watch(currentWeekProvider)
+        : ref.watch(pastWeekProvider(monday));
     final target = week.targetCount(plan);
     final trained = week.trainedCount(plan);
     final skipped = week.skippedCount(plan);
     final streakState = ref.watch(streakProvider);
     final streak = streakState.live(now);
+    final progress =
+        '${isCurrent ? 'ezen' : 'azon'} a héten $trained/$target megvan'
+        '${skipped > 0 ? ' · $skipped kihagyva' : ''}';
     var slot = 0;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 96),
-      children: [
-        // Tervválasztó csak akkor, ha van miből választani.
-        if (plans.length > 1) ...[
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final option in plans)
-                ChoiceChip(
-                  label: Text(option.name),
-                  selected: option.id == plan.id,
-                  onSelected: (_) => ref
-                      .read(workoutPlansProvider.notifier)
-                      .setActive(option.id),
+    return GestureDetector(
+      onHorizontalDragEnd: _onSwipe,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 96),
+        children: [
+          // Tervválasztó csak akkor, ha van miből választani.
+          if (widget.plans.length > 1) ...[
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final option in widget.plans)
+                  ChoiceChip(
+                    label: Text(option.name),
+                    selected: option.id == plan.id,
+                    onSelected: (_) => ref
+                        .read(workoutPlansProvider.notifier)
+                        .setActive(option.id),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+          Appear(
+            index: slot++,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    plan.name,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-            ],
+                PopupMenuButton<bool>(
+                  tooltip: 'A terv műveletei',
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: true,
+                      child: Text('Terv szerkesztése'),
+                    ),
+                    PopupMenuItem(value: false, child: Text('Terv törlése')),
+                  ],
+                  onSelected: (edit) => edit
+                      ? context.push('/workouts/edit/${plan.id}')
+                      : _confirmDelete(),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-        ],
-        Appear(
-          index: slot++,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  plan.name,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+          if (streak > 0) ...[
+            const SizedBox(height: 6),
+            _StreakPill(weeks: streak),
+          ],
+          if (streakState.completedWeeks.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _WeekDots(done: streakState.lastWeeks(now, 12), thisWeek: now),
+          ],
+          const SizedBox(height: 10),
+          Appear(
+            index: slot++,
+            child: _WeekNav(
+              monday: monday,
+              abWeek: plan.hasBWeek
+                  ? (weekIndexOf(monday, weeks: plan.weeks.length) == 0
+                        ? 'A'
+                        : 'B')
+                  : null,
+              isCurrent: isCurrent,
+              onPrev: () => _shift(-1),
+              onNext: () => _shift(1),
+              onToday: () => _shift(-_offset),
+            ),
+          ),
+          Paged(
+            pageKey: ValueKey(monday),
+            direction: _slideDir,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 6),
+                Text(
+                  '${plan.hasBWeek ? 'A és B hét' : 'Sima heti terv'} · '
+                  '${_offset > 0 ? 'ez a hét még előtted van' : progress}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: _offset <= 0 && trained >= target
+                        ? _done
+                        : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-              ),
-              PopupMenuButton<String>(
-                tooltip: 'A terv műveletei',
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'past',
-                    child: Text('Korábbi hetek jelölése'),
+                if (isCurrent) ...[
+                  const SizedBox(height: 14),
+                  _MotivationCard(
+                    fullyTrained: week.fullyTrained(plan),
+                    resolved: week.resolvedAll(plan),
+                    skipped: skipped,
+                    streak: streak,
                   ),
-                  PopupMenuItem(
-                    value: 'edit',
-                    child: Text('Terv szerkesztése'),
-                  ),
-                  PopupMenuItem(value: 'delete', child: Text('Terv törlése')),
                 ],
-                onSelected: (action) => switch (action) {
-                  'past' => showDialog<void>(
-                    context: context,
-                    builder: (_) => const _PastWeeksDialog(),
+                const SizedBox(height: 14),
+                for (var day = 0; day < days.length; day++)
+                  _DayCard(
+                    label: '${day + 1}. NAP',
+                    content: days[day],
+                    done: week.done.contains(day),
+                    skipped: week.skipped.contains(day),
+                    onLongPress: editable
+                        ? () => _mark(
+                            '${day + 1}. nap',
+                            days[day],
+                            monday: monday,
+                            resolved:
+                                week.done.contains(day) ||
+                                week.skipped.contains(day),
+                            apply: (outcome) => ref
+                                .read(workoutProgressProvider.notifier)
+                                .markBase(plan, day, outcome, week: monday),
+                          )
+                        : null,
                   ),
-                  'edit' => context.push('/workouts/edit/${plan.id}'),
-                  _ => _confirmDelete(context, ref),
-                },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '${plan.hasBWeek ? 'A és B hét' : 'Sima heti terv'} · ezen a héten '
-          '$trained/$target megvan'
-          '${skipped > 0 ? ' · $skipped kihagyva' : ''}',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: trained >= target
-                ? _done
-                : theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        if (streak > 0) ...[
-          const SizedBox(height: 10),
-          _StreakPill(weeks: streak),
-        ],
-        if (streakState.completedWeeks.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _WeekDots(done: streakState.lastWeeks(now, 12), thisWeek: now),
-        ],
-        const SizedBox(height: 14),
-        Appear(
-          index: slot++,
-          child: _MotivationCard(
-            fullyTrained: week.fullyTrained(plan),
-            resolved: week.resolvedAll(plan),
-            skipped: skipped,
-            streak: streak,
-          ),
-        ),
-        for (var w = 0; w < plan.weeks.length; w++) ...[
-          if (plan.hasBWeek)
-            _WeekHeader(
-              label: '${w == 0 ? 'A' : 'B'} HÉT',
-              isThisWeek: w == thisWeek,
-            )
-          else
-            const SizedBox(height: 14),
-          for (var day = 0; day < plan.weeks[w].length; day++)
-            Appear(
-              index: slot++,
-              child: _DayCard(
-                label: '${day + 1}. NAP',
-                content: plan.weeks[w][day],
-                done: w == thisWeek && week.done.contains(day),
-                skipped: w == thisWeek && week.skipped.contains(day),
-                // Csak az aktuális hét pipálható — a lezárt nap is, hogy a
-                // félrenyomott pipa visszavonható legyen.
-                onLongPress: w == thisWeek
-                    ? () => _mark(
-                        context,
-                        ref,
-                        '${day + 1}. nap',
-                        plan.weeks[w][day],
-                        resolved:
-                            week.done.contains(day) ||
-                            week.skipped.contains(day),
-                        apply: (outcome) => ref
-                            .read(workoutProgressProvider.notifier)
-                            .markBase(plan, day, outcome),
-                      )
-                    : null,
-              ),
+                if (week.carried.isNotEmpty) ...[
+                  const _CarriedHeader(),
+                  for (var i = 0; i < week.carried.length; i++)
+                    _DayCard(
+                      label: 'ÁTHOZOTT',
+                      content: week.carried[i].content,
+                      done: week.carried[i].done,
+                      skipped:
+                          week.carried[i].resolved && !week.carried[i].done,
+                      onLongPress: editable
+                          ? () => _mark(
+                              'Áthozott nap',
+                              week.carried[i].content,
+                              monday: monday,
+                              resolved: week.carried[i].resolved,
+                              apply: (outcome) => ref
+                                  .read(workoutProgressProvider.notifier)
+                                  .markCarried(plan, i, outcome, week: monday),
+                            )
+                          : null,
+                    ),
+                ],
+              ],
             ),
+          ),
         ],
-        if (week.carried.isNotEmpty) ...[
-          const _CarriedHeader(),
-          for (var i = 0; i < week.carried.length; i++)
-            Appear(
-              index: slot++,
-              child: _DayCard(
-                label: 'ÁTHOZOTT',
-                content: week.carried[i].content,
-                done: week.carried[i].done,
-                skipped: week.carried[i].resolved && !week.carried[i].done,
-                onLongPress: () => _mark(
-                  context,
-                  ref,
-                  'Áthozott nap',
-                  week.carried[i].content,
-                  resolved: week.carried[i].resolved,
-                  apply: (outcome) => ref
-                      .read(workoutProgressProvider.notifier)
-                      .markCarried(plan, i, outcome),
-                ),
-              ),
-            ),
-        ],
-      ],
+      ),
     );
   }
 }
@@ -593,73 +656,6 @@ class _WeekDots extends StatelessWidget {
       '${done ? 'megvolt' : 'kimaradt'}';
 }
 
-/// Visszamenőleges jelölés: ha egy elmúlt hét edzései megvoltak, csak nem
-/// lettek felírva, itt utólag teljesítettnek jelölhető — a sorozat ebből
-/// számolódik újra. A mai hét nincs a listán: azt a napok pipái döntik el.
-///
-/// ponytail: hét-szintű, nem nap-szintű. A régi hetek napjait nem tároljuk, és
-/// a sorozatnak úgyis csak a teljes hét számít.
-class _PastWeeksDialog extends ConsumerWidget {
-  const _PastWeeksDialog();
-
-  static const _count = 8;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final streak = ref.watch(streakProvider);
-    final monday = weekStartOf(DateTime.now());
-    String md(DateTime d) =>
-        '${d.month.toString().padLeft(2, '0')}. '
-        '${d.day.toString().padLeft(2, '0')}.';
-
-    return AlertDialog(
-      title: const Text('Korábbi hetek'),
-      contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'Pipáld ki a heteket, amikor minden edzés megvolt, csak '
-                'elfelejtetted felírni.',
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (var i = 1; i <= _count; i++)
-              Builder(
-                builder: (context) {
-                  final week = DateTime(
-                    monday.year,
-                    monday.month,
-                    monday.day - 7 * i,
-                  );
-                  final sunday = DateTime(week.year, week.month, week.day + 6);
-                  return CheckboxListTile(
-                    value: streak.completedWeeks.contains(week),
-                    title: Text('${md(week)} – ${md(sunday)}'),
-                    subtitle: i == 1 ? const Text('Múlt hét') : null,
-                    onChanged: (done) => ref
-                        .read(streakProvider.notifier)
-                        .markWeek(week, done: done ?? false),
-                  );
-                },
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Kész'),
-        ),
-      ],
-    );
-  }
-}
-
 class _ReflectionLine extends StatelessWidget {
   const _ReflectionLine({
     required this.icon,
@@ -690,39 +686,91 @@ class _ReflectionLine extends StatelessWidget {
   }
 }
 
-class _WeekHeader extends StatelessWidget {
-  const _WeekHeader({required this.label, required this.isThisWeek});
+/// Lapozósor: előző / következő hét, középen a hét dátumai és jelvénye. A
+/// jelvény mondja meg, hol vagy a valósághoz képest („EZ A HÉT"); máshol
+/// koppintásra visszavisz a mai hétre.
+class _WeekNav extends StatelessWidget {
+  const _WeekNav({
+    required this.monday,
+    required this.abWeek,
+    required this.isCurrent,
+    required this.onPrev,
+    required this.onNext,
+    required this.onToday,
+  });
 
-  final String label;
-  final bool isThisWeek;
+  final DateTime monday;
+  final String? abWeek; // 'A' / 'B' — csak A/B tervnél
+  final bool isCurrent;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final VoidCallback onToday;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 22, 0, 6),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: isThisWeek
-                ? theme.colorScheme.primary
-                : theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            isThisWeek ? '$label · EZ A HÉT' : label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: isThisWeek
-                  ? theme.colorScheme.onPrimary
-                  : theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
+    final badge = [
+      if (abWeek != null) '$abWeek HÉT',
+      if (isCurrent) 'EZ A HÉT',
+    ].join(' · ');
+    return Row(
+      children: [
+        IconButton(
+          onPressed: onPrev,
+          icon: const Icon(Icons.chevron_left),
+          tooltip: 'Előző hét',
+        ),
+        Expanded(
+          child: InkWell(
+            onTap: isCurrent ? null : onToday,
+            borderRadius: BorderRadius.circular(14),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      weekRangeLabel(monday),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isCurrent
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      badge.isEmpty ? 'VISSZA A MAI HÉTRE' : badge,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isCurrent
+                            ? theme.colorScheme.onPrimary
+                            : theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
+        IconButton(
+          onPressed: onNext,
+          icon: const Icon(Icons.chevron_right),
+          tooltip: 'Következő hét',
+        ),
+      ],
     );
   }
 }
