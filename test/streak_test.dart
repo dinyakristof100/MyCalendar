@@ -116,4 +116,24 @@ void main() {
       isFalse,
     ); // már levágva
   });
+
+  test('markWeek: a betömött lyuk összeköti a sorozatot, és visszavonható', () {
+    // w1, w2 megvolt, w3 nem lett felírva, w4 megvolt → csak 1 hét él.
+    final s = const Streak().advance(w1).advance(w2).advance(w4);
+    expect(s.weeks, 1);
+    final filled = s.markWeek(w3, done: true);
+    expect(filled.weeks, 4);
+    expect(filled.lastWeek, w4);
+    expect(filled.live(w4), 4);
+    expect(filled.markWeek(w3, done: false).weeks, 1);
+    // A legutolsó hét levétele az előzőre lépteti vissza a sorozat végét.
+    expect(filled.markWeek(w4, done: false).lastWeek, w3);
+    expect(const Streak().markWeek(w1, done: false).weeks, 0);
+  });
+
+  test('markWeek: a JSON-ból levágott régi futás nem vész el', () {
+    // 30 hetes sorozat, de a halmazban csak az utolsó hét van meg.
+    final s = Streak(weeks: 30, lastWeek: w3, completedWeeks: {w3});
+    expect(s.markWeek(w4, done: true).weeks, 31);
+  });
 }

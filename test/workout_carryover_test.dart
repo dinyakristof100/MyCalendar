@@ -116,4 +116,22 @@ void main() {
     final week = settleWeek(stored, plan, true, w2);
     expect([for (final c in week.carried) c.content], variant);
   });
+
+  test('utólag teljesnek jelölt előző hét: az áthozott napok eltűnnek', () {
+    final plan = _plan([
+      ['mell', 'hát', 'láb'],
+    ]);
+    final prev = WeekProgress(planId: 'a', weekStart: w1, done: const {0});
+    expect(settleWeek(prev, plan, true, w2).carried.length, 2);
+    expect(
+      settleWeek(prev, plan, true, w2, prevWeekDone: true).carried,
+      isEmpty,
+    );
+    // Ha a mai hét már el is volt mentve az áthozottakkal, onnan is lekerülnek.
+    final cur = settleWeek(prev, plan, true, w2);
+    expect(
+      settleWeek(cur, plan, true, w2, prevWeekDone: true).carried,
+      isEmpty,
+    );
+  });
 }

@@ -272,15 +272,27 @@ class _PlanView extends ConsumerWidget {
                   ),
                 ),
               ),
-              PopupMenuButton<bool>(
+              PopupMenuButton<String>(
                 tooltip: 'A terv műveletei',
                 itemBuilder: (_) => const [
-                  PopupMenuItem(value: true, child: Text('Terv szerkesztése')),
-                  PopupMenuItem(value: false, child: Text('Terv törlése')),
+                  PopupMenuItem(
+                    value: 'past',
+                    child: Text('Korábbi hetek jelölése'),
+                  ),
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Text('Terv szerkesztése'),
+                  ),
+                  PopupMenuItem(value: 'delete', child: Text('Terv törlése')),
                 ],
-                onSelected: (edit) => edit
-                    ? context.push('/workouts/edit/${plan.id}')
-                    : _confirmDelete(context, ref),
+                onSelected: (action) => switch (action) {
+                  'past' => showDialog<void>(
+                    context: context,
+                    builder: (_) => const _PastWeeksDialog(),
+                  ),
+                  'edit' => context.push('/workouts/edit/${plan.id}'),
+                  _ => _confirmDelete(context, ref),
+                },
               ),
             ],
           ),
@@ -579,6 +591,73 @@ class _WeekDots extends StatelessWidget {
       '${monday.month.toString().padLeft(2, '0')}. '
       '${monday.day.toString().padLeft(2, '0')}. heti — '
       '${done ? 'megvolt' : 'kimaradt'}';
+}
+
+/// Visszamenőleges jelölés: ha egy elmúlt hét edzései megvoltak, csak nem
+/// lettek felírva, itt utólag teljesítettnek jelölhető — a sorozat ebből
+/// számolódik újra. A mai hét nincs a listán: azt a napok pipái döntik el.
+///
+/// ponytail: hét-szintű, nem nap-szintű. A régi hetek napjait nem tároljuk, és
+/// a sorozatnak úgyis csak a teljes hét számít.
+class _PastWeeksDialog extends ConsumerWidget {
+  const _PastWeeksDialog();
+
+  static const _count = 8;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final streak = ref.watch(streakProvider);
+    final monday = weekStartOf(DateTime.now());
+    String md(DateTime d) =>
+        '${d.month.toString().padLeft(2, '0')}. '
+        '${d.day.toString().padLeft(2, '0')}.';
+
+    return AlertDialog(
+      title: const Text('Korábbi hetek'),
+      contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Pipáld ki a heteket, amikor minden edzés megvolt, csak '
+                'elfelejtetted felírni.',
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (var i = 1; i <= _count; i++)
+              Builder(
+                builder: (context) {
+                  final week = DateTime(
+                    monday.year,
+                    monday.month,
+                    monday.day - 7 * i,
+                  );
+                  final sunday = DateTime(week.year, week.month, week.day + 6);
+                  return CheckboxListTile(
+                    value: streak.completedWeeks.contains(week),
+                    title: Text('${md(week)} – ${md(sunday)}'),
+                    subtitle: i == 1 ? const Text('Múlt hét') : null,
+                    onChanged: (done) => ref
+                        .read(streakProvider.notifier)
+                        .markWeek(week, done: done ?? false),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Kész'),
+        ),
+      ],
+    );
+  }
 }
 
 class _ReflectionLine extends StatelessWidget {

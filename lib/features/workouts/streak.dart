@@ -63,6 +63,31 @@ class Streak {
         : Streak(completedWeeks: rest);
   }
 
+  /// Egy elmúlt hét kézi, visszamenőleges jelölése (elfelejtette felírni): a
+  /// [done] szerint beteszi vagy kiveszi a halmazból, majd a sorozatot a
+  /// halmazból újraszámolja — így egy betömött lyuk összeköti a két oldalát.
+  ///
+  /// A régi futást (a [lastWeek]-ig tartó [weeks] hetet) előbb visszaírjuk a
+  /// halmazba: a JSON [_keepWeeks] hétre vág, de a [weeks] a valódi hosszt
+  /// tudja — enélkül egy hosszú sorozat a vágásnál megszakadna.
+  Streak markWeek(DateTime weekStart, {required bool done}) {
+    final last = lastWeek;
+    final all = {
+      ...completedWeeks,
+      if (last != null)
+        for (var i = 0; i < weeks; i++)
+          DateTime(last.year, last.month, last.day - 7 * i),
+    };
+    done ? all.add(weekStart) : all.remove(weekStart);
+    if (all.isEmpty) return const Streak();
+    final newest = all.reduce((a, b) => a.isAfter(b) ? a : b);
+    var run = 0;
+    for (var w = newest; all.contains(w); w = _prevWeek(w)) {
+      run++;
+    }
+    return Streak(weeks: run, lastWeek: newest, completedWeeks: all);
+  }
+
   /// A mai héttől visszafelé [count] hét: teljesült-e. A `[0]` mindig a mai hét.
   List<bool> lastWeeks(DateTime now, int count) {
     var week = weekStartOf(now);
@@ -141,5 +166,11 @@ class StreakController extends Notifier<Streak> {
     if (identical(next, state)) return;
     state = next;
     await saveSetting(_key, jsonEncode(next.toJson()));
+  }
+
+  /// Egy elmúlt hét kézi jelölése — lásd [Streak.markWeek].
+  Future<void> markWeek(DateTime weekStart, {required bool done}) async {
+    state = state.markWeek(weekStart, done: done);
+    await saveSetting(_key, jsonEncode(state.toJson()));
   }
 }

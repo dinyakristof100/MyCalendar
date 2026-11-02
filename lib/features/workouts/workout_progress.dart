@@ -142,12 +142,17 @@ class WeekProgress {
 /// ponytail: csak a kozvetlen elozo hetrol hozunk at. Ha valaki egy teljes hetig
 /// ki sem nyitja az appot, annak a hetnek a napjai nem lancolodnak tovabb — a
 /// tovabbgyuruzest a skip helyett a nem-hasznalat zarja le.
+///
+/// A [prevWeekDone] azt jelzi, hogy az elozo het a sorozatban teljesitettkent
+/// szerepel. Rendes uton ilyenkor ugysem lenne athozott nap; ha viszont utolag,
+/// kezzel jeloltek meg, az athozottak elavultak — eldobjuk oket.
 WeekProgress settleWeek(
   WeekProgress stored,
   WorkoutPlan plan,
   bool carryOn,
-  DateTime now,
-) {
+  DateTime now, {
+  bool prevWeekDone = false,
+}) {
   final cur = weekStartOf(now);
   if (stored.planId == plan.id && stored.weekStart == cur) {
     // A terv szerkeszthető: ha közben kevesebb lett a nap, a megszűnt slotok
@@ -165,14 +170,17 @@ WeekProgress settleWeek(
         for (final slot in stored.skipped)
           if (slot < days) slot,
       },
-      carried: stored.carried,
+      carried: prevWeekDone ? const [] : stored.carried,
       markedOn: stored.markedOn,
     );
   }
 
   final prev = cur.subtract(const Duration(days: 7));
   final carried = <CarriedDay>[];
-  if (carryOn && stored.planId == plan.id && stored.weekStart == prev) {
+  if (carryOn &&
+      !prevWeekDone &&
+      stored.planId == plan.id &&
+      stored.weekStart == prev) {
     final lastDays = plan.daysOfWeekAt(prev);
     for (var i = 0; i < lastDays.length; i++) {
       if (!stored.done.contains(i) && !stored.skipped.contains(i)) {
@@ -212,8 +220,21 @@ final currentWeekProvider = Provider<WeekProgress>((ref) {
   final plan = ref.watch(workoutPlansProvider).active;
   final stored = ref.watch(workoutProgressProvider);
   if (plan == null) return stored;
-  return settleWeek(stored, plan, ref.watch(carryOverProvider), DateTime.now());
+  return settleWeek(
+    stored,
+    plan,
+    ref.watch(carryOverProvider),
+    DateTime.now(),
+    prevWeekDone: _prevWeekDone(ref.watch(streakProvider), DateTime.now()),
+  );
 });
+
+bool _prevWeekDone(Streak streak, DateTime now) {
+  final cur = weekStartOf(now);
+  return streak.completedWeeks.contains(
+    DateTime(cur.year, cur.month, cur.day - 7),
+  );
+}
 
 class WorkoutProgressController extends Notifier<WeekProgress> {
   @override
@@ -224,8 +245,13 @@ class WorkoutProgressController extends Notifier<WeekProgress> {
         : WeekProgress.fromJson(jsonDecode(raw) as Map<String, Object?>);
   }
 
-  WeekProgress _current(WorkoutPlan plan) =>
-      settleWeek(state, plan, ref.read(carryOverProvider), DateTime.now());
+  WeekProgress _current(WorkoutPlan plan) => settleWeek(
+    state,
+    plan,
+    ref.read(carryOverProvider),
+    DateTime.now(),
+    prevWeekDone: _prevWeekDone(ref.read(streakProvider), DateTime.now()),
+  );
 
   Future<void> _persist(WeekProgress week) async {
     state = week;
