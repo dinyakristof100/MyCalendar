@@ -49,6 +49,10 @@ class _EventFormState extends ConsumerState<_EventForm> {
   late DateTime _start;
   late DateTime _end;
 
+  /// Egész naposnál az utolsó nap (bezárólag) — külön az időpontos [_end]-től,
+  /// hogy a kapcsoló oda-vissza állítása egyiket se rontsa el.
+  late DateTime _lastDay;
+
   /// A kiválasztott kategória — új eseménynél még nincs mihez rendelni, ezért
   /// az űrlapon várakozik, és a mentés köti rá a létrejött eseményre.
   String? _categoryId;
@@ -70,15 +74,21 @@ class _EventFormState extends ConsumerState<_EventForm> {
       _categoryId = ref.read(categoriesProvider).of(editing.id)?.id;
       _allDay = editing.allDay;
       _start = editing.at;
-      // Egész naposnak nincs vége a modellben (a kezdés helyi éjfél). A mentés
-      // ezt úgyis a nap végére számolja — a +1 óra csak arra kell, hogy a
-      // kapcsolót kikapcsolva legyen értelmes időpontos vég.
-      _end = editing.end ?? editing.at.add(const Duration(hours: 1));
+      // Egész naposnál az `end` az utolsó nap (vagy egynaposnál semmi) — a +1
+      // óra csak arra kell, hogy a kapcsolót kikapcsolva legyen értelmes
+      // időpontos vég.
+      _end = editing.allDay || editing.end == null
+          ? editing.at.add(const Duration(hours: 1))
+          : editing.end!;
+      _lastDay = editing.allDay ? editing.end ?? _day(_start) : _day(_start);
     } else {
       _start = _initialStart();
       _end = _start.add(const Duration(hours: 1));
+      _lastDay = _day(_start);
     }
   }
+
+  static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
   /// Ma (vagy nap nélkül): a következő egész óra — a legtöbb esetben így elég
   /// a címet beírni. Jövőbeli napra: reggel 9. Múltbeli napra nem nyitunk,
@@ -107,6 +117,9 @@ class _EventFormState extends ConsumerState<_EventForm> {
   /// beállítottak. Így a kezdés átállítása sosem hoz létre érvénytelen párost.
   void _setStart(DateTime value) => setState(() {
     _end = _end.add(value.difference(_start));
+    // Napokban, nem órákban: a nyári időszámítás váltásán a különbség 23 óra.
+    final days = (_day(value).difference(_day(_start)).inHours / 24).round();
+    _lastDay = DateTime(_lastDay.year, _lastDay.month, _lastDay.day + days);
     _start = value;
   });
 
@@ -114,7 +127,8 @@ class _EventFormState extends ConsumerState<_EventForm> {
       setState(() => _end = clampEnd(_start, value));
 
   Future<void> _pickDate({required bool end}) async {
-    final current = end ? _end : _start;
+    final lastDay = end && _allDay;
+    final current = lastDay ? _lastDay : (end ? _end : _start);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     // A vége legkorábban a kezdés napján lehet, a kezdés pedig ma — de egy
@@ -133,6 +147,10 @@ class _EventFormState extends ConsumerState<_EventForm> {
       lastDate: DateTime(now.year + 5),
     );
     if (day == null) return;
+    if (lastDay) {
+      setState(() => _lastDay = _day(day));
+      return;
+    }
     final picked = DateTime(
       day.year,
       day.month,
@@ -189,7 +207,7 @@ class _EventFormState extends ConsumerState<_EventForm> {
           id: editing.id,
           title: title,
           start: _start,
-          end: _end,
+          end: _allDay ? _lastDay : _end,
           allDay: _allDay,
           // Változatlanul vissza: enélkül a natív oldal DTEND-et írna a sorozat
           // DURATION-je helyett, és a naptár elutasítaná a mentést.
@@ -206,7 +224,7 @@ class _EventFormState extends ConsumerState<_EventForm> {
         final id = await createEvent(
           title: title,
           start: _start,
-          end: _end,
+          end: _allDay ? _lastDay : _end,
           allDay: _allDay,
           rrule: rruleFor(_recurrence, _start),
           guests: guests,
@@ -351,15 +369,21 @@ class _EventFormState extends ConsumerState<_EventForm> {
                         dense: true,
                       ),
                       const SizedBox(height: 6),
-                      // Egész naposnál nincs időpont és nincs külön vég: a nap
-                      // maga az esemény.
-                      if (_allDay)
+                      // Egész naposnál nincs időpont, csak napok: az első és
+                      // az utolsó (bezárólag) — egynaposnál a kettő ugyanaz.
+                      if (_allDay) ...[
                         _WhenRow(
-                          label: 'Nap',
+                          label: 'Első nap',
                           value: _start,
                           onDate: () => _pickDate(end: false),
-                        )
-                      else ...[
+                        ),
+                        const SizedBox(height: 12),
+                        _WhenRow(
+                          label: 'Utolsó nap',
+                          value: _lastDay,
+                          onDate: () => _pickDate(end: true),
+                        ),
+                      ] else ...[
                         _WhenRow(
                           label: 'Kezdés',
                           value: _start,

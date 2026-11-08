@@ -111,13 +111,16 @@ CsvEvent? _rowToEvent(List<String> header, List<String> row) {
       ? DateTime(utc.year, utc.month, utc.day)
       : DateTime.fromMillisecondsSinceEpoch(startMs);
   final endMs = int.tryParse(value('endtime') ?? '') ?? startMs;
+  final endUtc = DateTime.fromMillisecondsSinceEpoch(endMs, isUtc: true);
 
   return CsvEvent(
     title: title,
     at: at,
-    // Egész naposnál a vég úgyis a napból számolódik (lásd `_when`), a mentés is
-    // csak megismétli ott a kezdést.
-    end: allDay ? at : clampEnd(at, DateTime.fromMillisecondsSinceEpoch(endMs)),
+    // Egész naposnál a vég az utolsó nap UTC éjfele (egynaposnál = a kezdés);
+    // a kezdés elé esőt a `_when` úgyis egynapossá zsugorítja.
+    end: allDay
+        ? DateTime(endUtc.year, endUtc.month, endUtc.day)
+        : clampEnd(at, DateTime.fromMillisecondsSinceEpoch(endMs)),
     allDay: allDay,
     rrule: value('rrule'),
     description: value('note'),
@@ -136,10 +139,12 @@ String buildBackupCsv(List<CalendarEvent> events) {
   final csv = StringBuffer()..writeln(_columns.join(','));
   for (final event in events) {
     if (!seen.add(event.id)) continue;
-    // Egész naposnál a mentés UTC éjfelet tárol, és a véget a kezdéssel
-    // azonosnak — ezt várja vissza az import is.
+    // Egész naposnál a mentés UTC éjfelet tárol, a véget pedig az utolsó nap
+    // UTC éjfeleként (egynaposnál = a kezdés) — ezt várja vissza az import is.
     final begin = event.allDay ? utcMidnight(event.at) : event.at;
-    final end = event.allDay ? begin : (event.end ?? event.at);
+    final end = event.allDay
+        ? utcMidnight(event.end ?? event.at)
+        : (event.end ?? event.at);
     csv.writeln(
       [
         _field(event.title),

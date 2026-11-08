@@ -81,6 +81,60 @@ void main() {
     });
   });
 
+  test('több napos egész napos: oda-vissza ugyanazok a napok', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    MethodCall? sent;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('mycalendar/device_calendar'),
+          (call) async {
+            sent = call;
+            return null;
+          },
+        );
+
+    // Az `end` az utolsó nap (bezárólag); az őszi óraátállítás is benne van.
+    await createEvent(
+      title: 'Nyaralás',
+      start: DateTime(2026, 10, 23),
+      end: DateTime(2026, 10, 27),
+      allDay: true,
+    );
+    final args = (sent!.arguments as Map).cast<String, Object?>();
+    expect(args['begin'], DateTime.utc(2026, 10, 23).millisecondsSinceEpoch);
+    expect(args['end'], DateTime.utc(2026, 10, 28).millisecondsSinceEpoch);
+
+    final multi = parseEvent(
+      _raw(
+        begin: args['begin']! as int,
+        end: args['end']! as int,
+        allDay: true,
+      ),
+    );
+    expect(multi.at, DateTime(2026, 10, 23));
+    expect(multi.end, DateTime(2026, 10, 27));
+
+    // Egynaposnál nincs vége; a kezdés elé eső utolsó nap egynapossá zsugorodik.
+    final single = parseEvent(
+      _raw(
+        begin: DateTime.utc(2026, 7, 23).millisecondsSinceEpoch,
+        end: DateTime.utc(2026, 7, 24).millisecondsSinceEpoch,
+        allDay: true,
+      ),
+    );
+    expect(single.end, isNull);
+    await createEvent(
+      title: 'x',
+      start: DateTime(2026, 7, 23),
+      end: DateTime(2026, 7, 20),
+      allDay: true,
+    );
+    expect(
+      (sent!.arguments as Map)['end'],
+      DateTime.utc(2026, 7, 24).millisecondsSinceEpoch,
+    );
+  });
+
   test('helyi nap → UTC éjfél: az óraátállítás napjain sem csúszik', () {
     // A magyar zóna pozitív eltolású, ezért a `toUtc()` az előző napra vinné.
     // A két óraátállítás napja a kényes eset: ott a helyi nap 23, illetve 25

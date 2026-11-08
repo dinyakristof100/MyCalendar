@@ -165,7 +165,7 @@ class MainActivity : FlutterActivity() {
      *
      * Ismétlődőnél a naptár DTEND helyett DURATION-t vár (és a kettő együtt
      * érvénytelen adat): a hosszt a kapott intervallumból számoljuk, egész
-     * naposra a napalapú `P1D` kell. A DTEND-et kifejezetten nullázzuk, mert a
+     * naposra a napalapú `P<n>D` kell (több napos egész napos is lehet). A DTEND-et kifejezetten nullázzuk, mert a
      * módosítást a provider a sor meglévő mezőivel együtt ellenőrzi.
      *
      * A leírás és a hely csak akkor íródik, ha a hívó küldte — az importált
@@ -189,7 +189,7 @@ class MainActivity : FlutterActivity() {
                 put(CalendarContract.Events.RRULE, rrule)
                 put(
                     CalendarContract.Events.DURATION,
-                    if (allDay) "P1D" else "PT${(end - begin) / 1000}S",
+                    if (allDay) "P${(end - begin) / 86_400_000}D" else "PT${(end - begin) / 1000}S",
                 )
             }
             put(CalendarContract.Events.ALL_DAY, if (allDay) 1 else 0)

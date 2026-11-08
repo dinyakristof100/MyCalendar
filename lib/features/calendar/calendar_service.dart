@@ -32,15 +32,22 @@ DateTime utcMidnight(DateTime day) =>
 
 /// A natív oldal idő-argumentumai.
 ///
-/// Egész naposnál a kezdés a választott nap UTC éjfele, a vége a következő nap
-/// UTC éjfele — az Android félig nyílt intervallumot vár, és UTC-ben nincs
-/// nyári időszámítás, tehát a nap pontosan 24 óra.
+/// Egész naposnál a kezdés a választott nap UTC éjfele, az [end] pedig az
+/// UTOLSÓ nap (bezárólag); a vége az utolsó utáni nap UTC éjfele — az Android
+/// félig nyílt intervallumot vár, és UTC-ben nincs nyári időszámítás, tehát a
+/// nap pontosan 24 óra. A kezdés elé eső utolsó nap egynapossá zsugorodik.
 Map<String, Object?> _when(DateTime start, DateTime end, bool allDay) {
   final begin = allDay ? utcMidnight(start) : start;
+  final last = utcMidnight(end);
   return {
     'begin': begin.millisecondsSinceEpoch,
-    'end': (allDay ? begin.add(const Duration(days: 1)) : end)
-        .millisecondsSinceEpoch,
+    'end':
+        (allDay
+                ? (last.isAfter(begin) ? last : begin).add(
+                    const Duration(days: 1),
+                  )
+                : end)
+            .millisecondsSinceEpoch,
     'allDay': allDay,
   };
 }
@@ -326,8 +333,9 @@ class CalendarEvent {
   final DateTime at;
   final bool allDay;
 
-  /// A befejezés ideje. Egész napos eseménynél `null` — ott az Android a
-  /// következő nap UTC éjfelét adja, ami nem megmutatható időpont.
+  /// A befejezés ideje. Egész napos eseménynél az UTOLSÓ nap helyi éjfele, ha
+  /// több napos; egynaposnál `null` (az Android a következő nap UTC éjfelét
+  /// adja, ami nem megmutatható időpont).
   final DateTime? end;
 
   /// Üres helyett `null`: a részletek lapon így elég a létezésüket vizsgálni.
@@ -368,16 +376,23 @@ CalendarEvent parseEvent(Map<String, Object?> raw) {
   final end = raw['end'] as int?;
   final title = (raw['title'] as String?) ?? '';
   final utc = DateTime.fromMillisecondsSinceEpoch(begin, isUtc: true);
+  final day = DateTime(utc.year, utc.month, utc.day);
+  // Egész naposnál a vég az utolsó utáni nap UTC éjfele: egy nappal vissza,
+  // ugyanúgy mezőnként átvéve, mint a kezdést.
+  final endUtc = end == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(end, isUtc: true);
+  final lastDay = endUtc == null
+      ? null
+      : DateTime(endUtc.year, endUtc.month, endUtc.day - 1);
 
   return CalendarEvent(
     id: raw['id']! as String,
     title: title.isEmpty ? '(névtelen esemény)' : title,
-    at: allDay
-        ? DateTime(utc.year, utc.month, utc.day)
-        : DateTime.fromMillisecondsSinceEpoch(begin),
-    end: allDay || end == null
-        ? null
-        : DateTime.fromMillisecondsSinceEpoch(end),
+    at: allDay ? day : DateTime.fromMillisecondsSinceEpoch(begin),
+    end: allDay
+        ? (lastDay != null && lastDay.isAfter(day) ? lastDay : null)
+        : (end == null ? null : DateTime.fromMillisecondsSinceEpoch(end)),
     allDay: allDay,
     description: _text(raw['description']),
     location: _text(raw['location']),

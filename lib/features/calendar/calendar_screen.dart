@@ -73,12 +73,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     _shiftMonth(velocity < 0 ? 1 : -1);
   }
 
-  /// Napra bontja az eseményeket. Az időpontos, több napon átnyúló esemény
-  /// minden érintett napra felkerül — mint egy telefonos naptárban.
-  ///
-  /// ponytail: az egész napos eseménynek nincs záró dátuma a modellben (az
-  /// Android UTC-éjfelet ad, lásd `parseEvent`), ezért az csak a kezdőnapján
-  /// jelenik meg. Egy 60 napos felső korlát megvéd a hibás, extrém hosszú
+  /// Napra bontja az eseményeket. A több napon átnyúló esemény (időpontos és
+  /// egész napos is) minden érintett napra felkerül — mint egy telefonos
+  /// naptárban. Egy 60 napos felső korlát megvéd a hibás, extrém hosszú
   /// eseményektől.
   Map<DateTime, List<CalendarEvent>> _byDay(List<CalendarEvent> events) {
     final map = <DateTime, List<CalendarEvent>>{};

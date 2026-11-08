@@ -71,7 +71,11 @@ class _EventDetails extends ConsumerWidget {
               const SizedBox(height: 20),
               _Detail(
                 icon: Icons.event_outlined,
-                text: dayLabel(event.at, today: DateTime.now()),
+                // Egész naposnál az `end` csak több naposnál van: az utolsó nap.
+                text: event.allDay && end != null
+                    ? '${dayLabel(event.at, today: DateTime.now())} – '
+                          '${dayLabel(end, today: DateTime.now())}'
+                    : dayLabel(event.at, today: DateTime.now()),
               ),
               _Detail(
                 icon: time == null ? Icons.today_outlined : Icons.schedule,
